@@ -170,6 +170,9 @@ class RecordingEngine(
 
     fun attachWriter(w: WavWriter) = writerLock.withLock { writer = w }
 
+    /** Pose un repère dans le fichier en cours, à la position actuelle de la prise. */
+    fun addMarker(label: String) = writerLock.withLock { writer?.addMarker(label) }
+
     /** Détache le fichier et le finalise (en-tête définitif). */
     fun detachWriter(): WavWriter? = writerLock.withLock {
         val w = writer

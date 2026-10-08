@@ -40,6 +40,10 @@ sealed interface UserMessage {
     data object SizeLimit : UserMessage
     data object WriteFailed : UserMessage
     data object CaptureFailed : UserMessage
+    data class Recovered(val name: String, val seconds: Double) : UserMessage
+    data object CaptureResumed : UserMessage
+    data object StoppedLowBattery : UserMessage
+    data object StoppedNoSpace : UserMessage
 }
 
 data class RecorderState(
@@ -58,8 +62,18 @@ data class RecorderState(
     val framesWritten: Long = 0,
     val fileName: String? = null,
     val freeBytes: Long = 0,
+    /** Dossier de destination, tel qu'affiché (« Musique/Brut », « Carte SD/Concerts »…). */
+    val folderLabel: String = "",
+    val batteryPercent: Int = 100,
+    val charging: Boolean = true,
     val message: UserMessage? = null,
 ) {
+    /** Batterie à surveiller pendant une prise. */
+    val lowBattery: Boolean get() = isRecording && !charging && batteryPercent <= LOW_BATTERY
+
+    /** Moins de deux minutes d'espace au format courant. */
+    val lowSpace: Boolean get() = isRecording && remainingSeconds < LOW_SPACE_SECONDS
+
     val selectedDevice: InputDevice? get() = devices.firstOrNull { it.id == selectedDeviceId }
     val isRecording: Boolean get() = phase == Phase.RECORDING
     val elapsedSeconds: Double get() = framesWritten.toDouble() / format.sampleRate
@@ -76,6 +90,13 @@ data class RecorderState(
  * Chef d'orchestre : choix de l'entrée, format, gain, écoute des niveaux et prises.
  * Vit aussi longtemps que l'application, pour que l'enregistrement survive à l'écran.
  */
+const val LOW_BATTERY = 15
+const val LOW_SPACE_SECONDS = 120L
+
+/** En dessous : on arrête proprement plutôt que de laisser le téléphone couper en pleine écriture. */
+private const val CRITICAL_BATTERY = 3
+private const val CRITICAL_SPACE_SECONDS = 5L
+
 class RecorderController(private val context: Context) {
 
     private val appVersion: String = runCatching {
@@ -117,6 +138,40 @@ class RecorderController(private val context: Context) {
             )
         }
         scope.launch { deviceRepository.devices.collect(::onDevicesChanged) }
+        refreshBattery()
+        _state.update { it.copy(folderLabel = storage.folderLabel(), freeBytes = storage.freeBytes()) }
+        // Une prise interrompue par un arrêt brutal est réparée et publiée dès le démarrage.
+        scope.launch {
+            val recovered = withContext(Dispatchers.IO) { storage.recoverInterrupted() }
+            if (recovered != null) _state.update { it.copy(message = UserMessage.Recovered(recovered.name, recovered.seconds)) }
+        }
+    }
+
+    /** Change le dossier de destination (null = dossier par défaut). Sans effet pendant une prise. */
+    fun setCustomFolder(tree: android.net.Uri?) {
+        if (_state.value.isRecording) return
+        runCatching { storage.setCustomFolder(tree) }
+        _state.update { it.copy(folderLabel = storage.folderLabel(), freeBytes = storage.freeBytes()) }
+    }
+
+    val customFolder: android.net.Uri? get() = storage.customFolder
+
+    private fun refreshBattery() {
+        val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)) ?: return
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100)
+        val plugged = intent.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+        if (level >= 0 && scale > 0) _state.update { it.copy(batteryPercent = level * 100 / scale, charging = plugged) }
+    }
+
+    /** Arrête et sauvegarde avant que la batterie ou le stockage ne lâchent. */
+    private fun guardResources() {
+        val s = _state.value
+        if (!s.isRecording) return
+        when {
+            !s.charging && s.batteryPercent <= CRITICAL_BATTERY -> stopRecording(UserMessage.StoppedLowBattery)
+            s.freeBytes > 0 && s.remainingSeconds < CRITICAL_SPACE_SECONDS -> stopRecording(UserMessage.StoppedNoSpace)
+        }
     }
 
     private fun keyOf(d: InputDevice) = "${d.kind}|${d.productName}|${d.address}"
@@ -313,6 +368,31 @@ class RecorderController(private val context: Context) {
         }
     }
 
+    /**
+     * La capture a lâché en pleine prise (serveur audio redémarré, pilote USB…) : on
+     * rouvre l'entrée et on continue dans le MÊME fichier, avec un repère à l'endroit du trou.
+     */
+    private fun resumeCapture(): Boolean {
+        val old = engine ?: return false
+        val writer = old.detachWriter() ?: return false
+        closeEngine()
+        // Le format est verrouillé pendant une prise : la nouvelle capture est compatible.
+        val fresh = openEngine()
+        if (fresh == null) {
+            // L'entrée ne revient pas : on sauvegarde proprement ce qui a été capté.
+            runCatching { writer.close() }
+            runCatching { currentFile?.publish() }
+            val name = currentFile?.displayName.orEmpty()
+            currentFile = null
+            _state.update { it.copy(phase = Phase.STOPPED, message = UserMessage.Saved(name)) }
+            return true
+        }
+        writer.addMarker(context.getString(R.string.marker_resumed))
+        fresh.attachWriter(writer)
+        _state.update { it.copy(phase = Phase.RECORDING, message = UserMessage.CaptureResumed) }
+        return true
+    }
+
     private fun closeEngine() {
         engine?.stop()
         engine = null
@@ -379,10 +459,22 @@ class RecorderController(private val context: Context) {
                     freeBytes = free ?: it.freeBytes,
                 )
             }
+            if (refreshFree) {
+                scope.launch {
+                    refreshBattery()
+                    guardResources()
+                }
+            }
         }
 
         override fun onCaptureInfo(info: CaptureInfo) {
+            val before = _state.value.capture
             _state.update { it.copy(capture = info) }
+            // Un appel ou une autre appli peut couper le micro : la prise continue (en silence),
+            // et un repère marque l'endroit exact dans le fichier.
+            if (_state.value.isRecording && before != null && before.silenced != info.silenced) {
+                engine?.addMarker(context.getString(if (info.silenced) R.string.marker_silenced else R.string.marker_unsilenced))
+            }
         }
 
         override fun onWriteError(error: IOException) {
@@ -395,6 +487,7 @@ class RecorderController(private val context: Context) {
 
         override fun onReadError(code: Int) {
             scope.launch {
+                if (_state.value.isRecording && resumeCapture()) return@launch
                 if (_state.value.isRecording) stopRecording(UserMessage.CaptureFailed)
                 closeEngine()
                 _state.update { it.copy(phase = Phase.STOPPED, message = UserMessage.CaptureFailed) }

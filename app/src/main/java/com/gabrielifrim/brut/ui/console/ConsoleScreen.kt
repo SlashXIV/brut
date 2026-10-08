@@ -299,7 +299,10 @@ private fun Warnings(state: RecorderState) {
     val warnings = buildList {
         if (state.isRerouted) add(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()))
         if (c?.silenced == true) add(stringResource(R.string.warning_silenced))
-        if (c?.source == CaptureSource.MIC) add(stringResource(R.string.warning_mic_source))
+        if (state.lowBattery) add(stringResource(R.string.warning_low_battery, state.batteryPercent))
+        if (state.lowSpace) add(stringResource(R.string.warning_low_space, formatLongDuration(state.remainingSeconds)))
+        // Seulement si le repli est subi : un mode Standard choisi à la main n'a pas à être signalé.
+        if (c?.source == CaptureSource.MIC && state.captureMode != CaptureSource.MIC) add(stringResource(R.string.warning_mic_source))
         if (!c?.activeEffects.isNullOrEmpty()) add(stringResource(R.string.warning_effects, c.activeEffects.joinToString()))
         val deviceRate = c?.deviceSampleRate
         if (deviceRate != null && deviceRate != state.format.sampleRate) {
@@ -331,7 +334,7 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
             val sub = when {
                 state.isRecording && state.fileName != null -> stringResource(R.string.recording_to, state.fileName)
                 state.remainingSeconds in 1..600 -> stringResource(R.string.remaining_low, formatLongDuration(state.remainingSeconds))
-                else -> stringResource(R.string.remaining, formatLongDuration(state.remainingSeconds))
+                else -> stringResource(R.string.remaining, formatLongDuration(state.remainingSeconds), state.folderLabel)
             }
             Text(sub, style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -370,7 +373,7 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
     LaunchedEffect(message) {
         if (message != null) {
             shown = message
-            delay(if (message is UserMessage.RecordingStoppedDeviceLost) 7000 else 3500)
+            delay(if (message is UserMessage.Saved || message is UserMessage.DeviceConnected) 3500 else 7000)
             onDone()
         }
     }
@@ -384,9 +387,14 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
             UserMessage.SizeLimit -> stringResource(R.string.msg_size_limit)
             UserMessage.WriteFailed -> stringResource(R.string.msg_write_failed)
             UserMessage.CaptureFailed -> stringResource(R.string.msg_capture_failed)
+            is UserMessage.Recovered -> stringResource(R.string.msg_recovered, m.name, formatDuration(m.seconds, withHundredths = false))
+            UserMessage.CaptureResumed -> stringResource(R.string.msg_capture_resumed)
+            UserMessage.StoppedLowBattery -> stringResource(R.string.msg_stopped_battery)
+            UserMessage.StoppedNoSpace -> stringResource(R.string.msg_stopped_space)
         }
         val accent = when (m) {
-            is UserMessage.Saved, is UserMessage.DeviceConnected -> BrutColors.Green
+            is UserMessage.Saved, is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Green
+            UserMessage.CaptureResumed -> BrutColors.Amber
             else -> BrutColors.Red
         }
         Text(
