@@ -19,6 +19,11 @@ import java.nio.channels.FileChannel
 class WavWriter(
     private val channel: FileChannel,
     val format: AudioFormatSpec,
+    /**
+     * Chunks de métadonnées placés avant `data` (ex. `bext` du Broadcast Wave). Les
+     * lecteurs ignorent ceux qu'ils ne connaissent pas : le fichier reste un WAV standard.
+     */
+    private val extraChunks: List<Pair<String, ByteArray>> = emptyList(),
 ) : Closeable {
 
     private val headerSize: Int
@@ -80,7 +85,8 @@ class WavWriter(
     private fun buildHeader(): ByteBuffer {
         val bits = format.bitDepth.bits
         val blockAlign = format.bytesPerFrame
-        val b = ByteBuffer.allocate(80).order(ByteOrder.LITTLE_ENDIAN)
+        val extraSize = extraChunks.sumOf { 8 + it.second.size + (it.second.size and 1) }
+        val b = ByteBuffer.allocate(80 + extraSize).order(ByteOrder.LITTLE_ENDIAN)
         b.put(ascii("RIFF")); b.putInt(0); b.put(ascii("WAVE"))
         b.put(ascii("fmt "))
         when (format.bitDepth) {
@@ -102,6 +108,11 @@ class WavWriter(
                 b.putShort(0)                                   // cbSize
                 b.put(ascii("fact")); b.putInt(4); b.putInt(0)
             }
+        }
+        for ((id, body) in extraChunks) {
+            require(id.length == 4) { "Identifiant de chunk invalide : $id" }
+            b.put(ascii(id)); b.putInt(body.size); b.put(body)
+            if (body.size and 1 == 1) b.put(0)
         }
         b.put(ascii("data")); b.putInt(0)
         b.flip()
