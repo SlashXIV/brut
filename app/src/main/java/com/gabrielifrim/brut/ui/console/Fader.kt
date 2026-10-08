@@ -103,7 +103,7 @@ fun GainFader(
         StepButton("−", stringResource(R.string.gain_decrease)) { emit(current - STEP_DB) }
         Readout(
             stringResource(R.string.db_value, formatDb(valueDb, signed = true) ?: "0,0"),
-            Modifier.padding(horizontal = 8.dp).width(84.dp),
+            Modifier.padding(horizontal = 8.dp).width(100.dp),
             color = if (valueDb == 0f) BrutColors.Cream else BrutColors.Amber,
         )
         StepButton("+", stringResource(R.string.gain_increase)) { emit(current + STEP_DB) }

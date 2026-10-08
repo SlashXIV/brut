@@ -8,6 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -84,21 +89,17 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             .background(BrutColors.Graphite)
             .safeDrawingPadding(),
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Header(state, onFormat = { showFormat = true })
-            Spacer(Modifier.height(10.dp))
-            SourceStrip(state, onClick = { showSource = true })
-            Warnings(state)
-            Spacer(Modifier.height(10.dp))
+        val meters = @Composable { modifier: Modifier ->
             MeterBridge(
                 levels = state.levels.take(state.format.channels),
                 channelLabels = labels,
                 mode = state.meterMode,
                 onModeChange = actions::setMeterMode,
                 onResetClip = actions::resetClip,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = modifier,
             )
-            Spacer(Modifier.height(12.dp))
+        }
+        val gainPanel = @Composable {
             GainPanel(
                 stereo = stereo,
                 labels = labels,
@@ -107,8 +108,57 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                 onGain = actions::setGain,
                 onLinked = actions::setGainLinked,
             )
-            Spacer(Modifier.height(8.dp))
-            Transport(state, actions)
+        }
+        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            val landscape = maxWidth > maxHeight && maxWidth >= 560.dp
+            // Sous ~680 dp de haut, laisser le pont de mesure prendre « le reste » l'écraserait :
+            // on lui donne une hauteur minimale et la console défile.
+            val compact = !landscape && maxHeight < 680.dp
+            val compactMeterHeight = maxOf(340.dp, maxHeight * 0.62f)
+            when {
+                landscape -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    meters(Modifier.weight(1f).fillMaxHeight())
+                    // Le transport reste fixé en bas : le bouton REC ne doit jamais défiler hors de vue.
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                            Header(state, onFormat = { showFormat = true })
+                            Spacer(Modifier.height(10.dp))
+                            SourceStrip(state, onClick = { showSource = true })
+                            Warnings(state)
+                            Spacer(Modifier.height(10.dp))
+                            gainPanel()
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Transport(state, actions)
+                    }
+                }
+                compact -> Column(Modifier.fillMaxSize()) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                        Header(state, onFormat = { showFormat = true })
+                        Spacer(Modifier.height(10.dp))
+                        SourceStrip(state, onClick = { showSource = true })
+                        Warnings(state)
+                        Spacer(Modifier.height(10.dp))
+                        meters(Modifier.fillMaxWidth().height(compactMeterHeight))
+                        Spacer(Modifier.height(12.dp))
+                        gainPanel()
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Transport(state, actions)
+                }
+                else -> Column(Modifier.fillMaxSize()) {
+                    Header(state, onFormat = { showFormat = true })
+                    Spacer(Modifier.height(10.dp))
+                    SourceStrip(state, onClick = { showSource = true })
+                    Warnings(state)
+                    Spacer(Modifier.height(10.dp))
+                    meters(Modifier.weight(1f).fillMaxWidth())
+                    Spacer(Modifier.height(12.dp))
+                    gainPanel()
+                    Spacer(Modifier.height(8.dp))
+                    Transport(state, actions)
+                }
+            }
         }
 
         MessageBar(state.message, actions::consumeMessage, Modifier.align(Alignment.BottomCenter))
@@ -204,7 +254,7 @@ private fun CaptureTags(state: RecorderState) {
         Text(stringResource(R.string.capture_waiting), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
         return
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val (sourceText, sourceColor) = when (c.source) {
             CaptureSource.UNPROCESSED -> stringResource(R.string.tag_raw) to BrutColors.Green
             CaptureSource.VOICE_RECOGNITION -> stringResource(R.string.tag_no_agc) to BrutColors.Cream

@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -53,7 +54,6 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
     val target = vuFraction(level.rmsDb - VU_REFERENCE_DBFS)
     val needle by animateFloatAsState(target, spring(dampingRatio = 0.78f, stiffness = 120f), label = "aiguille")
     val measurer = rememberTextMeasurer()
-    val scaleStyle = BrutType.ReadoutSmall.copy(fontFamily = BrutFonts.Engraving, fontSize = 11.sp)
     val peakLit = level.holdDb > -3f
 
     Canvas(modifier) {
@@ -71,11 +71,28 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
             Offset(inset, inset), faceSize, CornerRadius(2.dp.toPx()),
         )
 
-        val pivot = Offset(size.width / 2, size.height * 1.02f)
-        val radius = size.height * 0.80f
+        // Géométrie calculée sur la place réelle : l'arc ET ses chiffres doivent tenir
+        // en hauteur comme en largeur, quel que soit le format du cadran.
+        val labelSpace = 26.dp.toPx()
+        val halfSweep = Math.toRadians(SWEEP_DEG / 2.0)
+        // Comme sur un vrai VU, le pivot peut se trouver SOUS le cadran : l'arc s'étale
+        // alors sur toute la largeur au lieu de rester un petit demi-cercle.
+        val top = inset + 6.dp.toPx() + labelSpace
+        val bottomRoom = size.height - inset - 8.dp.toPx()
+        // Marge latérale : les coins bas portent le canal (G/D) et la LED PEAK.
+        val byWidth = (size.width / 2 - inset - 64.dp.toPx()) / sin(halfSweep).toFloat() - labelSpace
+        val byHeight = (bottomRoom - top) / (1f - cos(halfSweep).toFloat())
+        val radius = minOf(byWidth, byHeight).coerceAtLeast(24.dp.toPx())
+        val pivot = Offset(size.width / 2, top + radius)
+        // Les textes suivent la taille du cadran, dans des bornes lisibles.
+        val k = (radius / 120.dp.toPx()).coerceIn(0.72f, 1.15f)
+        val scaleStyle = BrutType.ReadoutSmall.copy(fontFamily = BrutFonts.Engraving, fontSize = 11.sp * k)
+        // Petit cadran : on ne chiffre que les repères principaux pour qu'ils ne se chevauchent pas.
+        val labelled = if (radius < 110.dp.toPx()) setOf(-20, -10, -5, -3, 0, 3) else VU_MARKS.toSet()
         fun angleOf(f: Float) = Math.toRadians((-90f - SWEEP_DEG / 2 + SWEEP_DEG * f).toDouble())
         fun pointAt(f: Float, rr: Float) = angleOf(f).let { Offset(pivot.x + rr * cos(it).toFloat(), pivot.y + rr * sin(it).toFloat()) }
 
+        clipRect(inset, inset, size.width - inset, size.height - inset) {
         val ink = Color(0xFF231C14)
         val red = Color(0xFFB4291D)
         // Arc de l'échelle, rouge au-delà de 0 VU.
@@ -93,14 +110,19 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
                 mark < 0 -> "${-mark}"
                 else -> "0"
             }
+            if (mark !in labelled) return@forEach
             val layout = measurer.measure(text, scaleStyle.copy(color = color))
             val p = pointAt(f, radius + 17.dp.toPx())
             drawText(layout, topLeft = Offset(p.x - layout.size.width / 2, p.y - layout.size.height / 2))
         }
 
         // Légendes du cadran.
-        val vu = measurer.measure("VU", BrutType.Title.copy(color = ink, fontSize = 20.sp))
-        drawText(vu, topLeft = Offset(size.width / 2 - vu.size.width / 2, size.height * 0.52f))
+        // Sur un tout petit cadran, l'inscription chevaucherait l'échelle : on s'en passe.
+        if (radius >= 90.dp.toPx()) {
+            val vu = measurer.measure("VU", BrutType.Title.copy(color = ink, fontSize = 20.sp * k))
+            val vuY = minOf(pivot.y - radius * 0.55f, size.height - inset - 8.dp.toPx() - vu.size.height / 2)
+            drawText(vu, topLeft = Offset(size.width / 2 - vu.size.width / 2, vuY - vu.size.height / 2))
+        }
         val ch = measurer.measure(label, BrutType.Legend.copy(color = ink))
         drawText(ch, topLeft = Offset(inset + 8.dp.toPx(), size.height - inset - ch.size.height - 4.dp.toPx()))
 
@@ -113,9 +135,10 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
 
         // Aiguille : fine, noire, avec un contrepoids sous le cadran.
         val tip = pointAt(needle, radius + 6.dp.toPx())
-        val base = pointAt(needle, radius * 0.25f)
+        val base = pointAt(needle, radius * 0.18f)
         drawLine(Color.Black.copy(alpha = 0.18f), base + Offset(2.dp.toPx(), 2.dp.toPx()), tip + Offset(2.dp.toPx(), 2.dp.toPx()), 2.dp.toPx(), StrokeCap.Round)
         drawLine(Color(0xFF15100B), base, tip, 1.6.dp.toPx(), StrokeCap.Round)
+        }
         // Cache-pivot sombre en bas du cadran.
         drawRect(
             Brush.verticalGradient(listOf(Color(0xFF2A241E), Color(0xFF14110E))),

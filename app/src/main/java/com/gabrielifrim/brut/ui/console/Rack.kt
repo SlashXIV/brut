@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -280,6 +283,13 @@ fun Readout(text: String, modifier: Modifier = Modifier, color: Color = BrutColo
             }
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
-        Text(text, style = BrutType.Readout.copy(shadow = Shadow(color.copy(alpha = 0.6f), Offset.Zero, 8f)), color = color, maxLines = 1)
+        // Le texte se réduit plutôt que d'être coupé quand l'afficheur est étroit.
+        BasicText(
+            text,
+            style = BrutType.Readout.copy(color = color, shadow = Shadow(color.copy(alpha = 0.6f), Offset.Zero, 8f)),
+            maxLines = 1,
+            softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = BrutType.Readout.fontSize, stepSize = 0.5.sp),
+        )
     }
 }

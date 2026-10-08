@@ -234,10 +234,10 @@ private fun Readouts(label: String, level: ChannelLevel) {
     val floor = stringResource(R.string.dbfs_floor)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = BrutType.Legend, color = BrutColors.Amber)
-        ReadoutLine(stringResource(R.string.meter_peak), formatDb(level.holdDb) ?: floor)
+        ReadoutLine(stringResource(R.string.meter_peak), formatDb(level.holdDb, signed = true) ?: floor)
         ReadoutLine(stringResource(R.string.meter_rms), formatDb(level.rmsDb) ?: floor)
         ReadoutLine(
-            stringResource(R.string.meter_max), formatDb(level.maxDb) ?: floor,
+            stringResource(R.string.meter_max), formatDb(level.maxDb, signed = true) ?: floor,
             highlight = level.maxDb > -1f,
         )
     }
