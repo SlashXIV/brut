@@ -30,6 +30,8 @@ import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
+import com.gabrielifrim.brut.audio.TakeOptions
+import com.gabrielifrim.brut.ui.formatDb
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.draw.drawBehind
@@ -67,11 +69,14 @@ fun FormatSheet(
     format: AudioFormatSpec,
     device: InputDevice?,
     locked: Boolean,
+    options: TakeOptions,
+    headphones: Boolean,
     onChange: (AudioFormatSpec) -> Unit,
+    onOptions: (TakeOptions) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BrutSheet(onDismiss) {
-        Text(stringResource(R.string.format_title), style = BrutType.Title)
+        Text(stringResource(R.string.take_settings_title), style = BrutType.Title)
         Text(stringResource(R.string.format_subtitle), style = BrutType.Body, color = BrutColors.CreamDim)
         if (locked) {
             Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
@@ -144,6 +149,8 @@ fun FormatSheet(
             stringResource(R.string.format_data_rate, formatBytes(format.bytesPerSecond * 60)),
             style = BrutType.Readout, color = BrutColors.CreamDim,
         )
+
+        ToolsSection(options, headphones, locked, onOptions)
     }
 }
 
@@ -319,4 +326,74 @@ private fun deviceDetails(device: InputDevice): String {
         if (lo == hi) formatRate(lo) else "${formatRate(lo).removeSuffix(" kHz")} – ${formatRate(hi)}"
     }
     return "$channels · $rates"
+}
+
+/**
+ * Outils de prise. Chaque commutateur a une position « OFF » : rien n'est actif par
+ * défaut, l'enregistrement reste brut tant qu'on ne demande rien.
+ */
+@Composable
+private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit) {
+    val off = stringResource(R.string.tools_off)
+    Spacer(Modifier.height(22.dp))
+    Text(stringResource(R.string.tools_title), style = BrutType.Title)
+    Spacer(Modifier.height(12.dp))
+    RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            RotarySelector(
+                legend = stringResource(R.string.tools_preroll),
+                options = TakeOptions.PREROLL_CHOICES,
+                selected = options.prerollSeconds,
+                label = { if (it == 0) off else "$it s" },
+                onSelect = { onOptions(options.copy(prerollSeconds = it)) },
+                enabled = !locked,
+            )
+            val safetyChoices = listOf<Float?>(null) + TakeOptions.SAFETY_CHOICES
+            RotarySelector(
+                legend = stringResource(R.string.tools_safety),
+                options = safetyChoices,
+                selected = if (options.safetyTrack) options.safetyDb else null,
+                label = { it?.let { db -> "−${(-db).toInt()}" } ?: off },
+                onSelect = { v -> onOptions(if (v == null) options.copy(safetyTrack = false) else options.copy(safetyTrack = true, safetyDb = v)) },
+                enabled = !locked,
+            )
+            val triggerChoices = listOf<Float?>(null) + TakeOptions.TRIGGER_CHOICES
+            RotarySelector(
+                legend = stringResource(R.string.tools_trigger),
+                options = triggerChoices,
+                selected = if (options.trigger) options.triggerDb else null,
+                label = { it?.let { db -> "−${(-db).toInt()}" } ?: off },
+                onSelect = { v -> onOptions(if (v == null) options.copy(trigger = false) else options.copy(trigger = true, triggerDb = v)) },
+                enabled = !locked,
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(BrutColors.Recess)
+            .clickable(enabled = !locked, role = Role.Switch) { onOptions(options.copy(monitor = !options.monitor)) }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Lamp(BrutColors.Amber, lit = options.monitor)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.tools_monitor).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Cream)
+            Text(
+                stringResource(if (headphones) R.string.tools_monitor_hint else R.string.warning_monitor_no_headphones),
+                style = BrutType.Body, color = if (headphones) BrutColors.CreamDim else BrutColors.Amber,
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    listOf(
+        R.string.tools_preroll_hint,
+        R.string.tools_safety_hint,
+        R.string.tools_trigger_hint,
+    ).forEach {
+        Text(stringResource(it), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 4.dp))
+    }
 }

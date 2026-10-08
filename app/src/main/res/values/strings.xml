@@ -57,7 +57,6 @@
     <string name="warning_resampled">Le matériel tourne à %1$s : Android rééchantillonne.</string>
 
     <!-- Format -->
-    <string name="format_title">Format du fichier</string>
     <string name="format_subtitle">WAV non compressé, sans aucun traitement automatique.</string>
     <string name="format_rate_unit">kHz</string>
     <string name="format_depth_unit">BITS</string>
@@ -112,6 +111,7 @@
     <!-- Robustesse -->
     <string name="marker_silenced">Micro coupé par le système</string>
     <string name="marker_unsilenced">Micro rendu</string>
+    <string name="marker_manual">Repère %1$d</string>
     <string name="marker_resumed">Reprise après une interruption de la capture</string>
     <string name="msg_recovered">Prise interrompue récupérée : %1$s (%2$s)</string>
     <string name="msg_capture_resumed">La capture s’est interrompue : reprise automatique dans le même fichier, un repère marque le trou.</string>
@@ -122,6 +122,38 @@
     <string name="storage_music">Musique</string>
     <string name="storage_internal">Stockage interne</string>
     <string name="storage_sd">Carte SD</string>
+
+    <!-- Outils de prise -->
+    <string name="take_settings_title">Réglages de prise</string>
+    <string name="tools_title">Outils de prise</string>
+    <string name="tools_off">OFF</string>
+    <string name="tools_preroll">PRÉ-REC</string>
+    <string name="tools_safety">SÉCURITÉ</string>
+    <string name="tools_trigger">SEUIL</string>
+    <string name="tools_monitor">Écoute casque</string>
+    <string name="tools_monitor_hint">Le signal enregistré est renvoyé au casque, avec une petite latence.</string>
+    <string name="tools_preroll_hint">PRÉ-REC : les secondes précédant l’appui sur REC sont gardées en tête du fichier.</string>
+    <string name="tools_safety_hint">SÉCURITÉ : un second fichier « _securite » est enregistré en parallèle, plus bas, au cas où la prise principale sature.</string>
+    <string name="tools_trigger_hint">SEUIL : REC arme la prise, qui démarre seule dès que le son dépasse le seuil.</string>
+    <string name="tools_short_preroll">Pré-rec %1$d s</string>
+    <string name="tools_short_safety">Sécurité %1$s dB</string>
+    <string name="tools_short_trigger">Seuil %1$s dBFS</string>
+    <string name="tools_short_monitor">Casque</string>
+    <string name="warning_armed">Prise armée : elle démarre dès que le son dépasse %1$s dBFS.</string>
+    <string name="warning_monitor_no_headphones">Branche un casque pour l’écoute : par le haut-parleur, le son repartirait dans le micro.</string>
+    <string name="marker_button">Poser un repère</string>
+    <string name="msg_marker">Repère posé : n° %1$d</string>
+    <string name="disarm">Désarmer</string>
+    <string name="action_marker">Repère</string>
+    <string name="notification_armed_title">Brut est armé</string>
+    <string name="notification_armed_text">En attente du signal…</string>
+    <string name="meter_mode_lufs">LUFS</string>
+    <string name="meter_mode_spectrum">SPECTRE</string>
+    <string name="lufs_momentary">Instantané</string>
+    <string name="lufs_short">Court terme</string>
+    <string name="lufs_integrated">Intégré</string>
+    <string name="lufs_true_peak">Crête vraie max</string>
+    <string name="lufs_reset">Remettre à zéro</string>
 
     <!-- Bibliothèque -->
     <string name="library_open">Prises</string>

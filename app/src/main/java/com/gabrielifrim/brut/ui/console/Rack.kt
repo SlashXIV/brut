@@ -151,8 +151,12 @@ fun <T> RotarySelector(
     val index = options.indexOf(selected).coerceAtLeast(0)
     val currentIndex by rememberUpdatedState(index)
     val select by rememberUpdatedState(onSelect)
-    // Course angulaire : 90° au total pour 2 positions, 120° au-delà.
-    val span = if (options.size <= 2) 90f else 120f
+    // Course angulaire : 90° pour 2 positions, 120° jusqu'à 4, 170° au-delà (les repères restent lisibles).
+    val span = when {
+        options.size <= 2 -> 90f
+        options.size <= 4 -> 120f
+        else -> 170f
+    }
     fun angleOf(i: Int) = if (options.size == 1) 0f else -span / 2 + span * i / (options.size - 1)
     val pointer by animateFloatAsState(angleOf(index), spring(dampingRatio = 0.55f, stiffness = 700f), label = "cran")
     val drag = remember { mutableFloatStateOf(0f) }

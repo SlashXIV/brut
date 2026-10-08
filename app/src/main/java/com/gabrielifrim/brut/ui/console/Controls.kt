@@ -63,14 +63,27 @@ import kotlin.math.sin
  * tourne, avec une lueur qui respire pour qu'on le voie du coin de l'œil.
  */
 @Composable
-fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, armed: Boolean = false) {
     val transition = rememberInfiniteTransition(label = "rec")
     val glow by transition.animateFloat(
         initialValue = 0.25f, targetValue = 0.75f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glow",
     )
-    val ring by animateColorAsState(if (recording) BrutColors.Red else BrutColors.Edge, label = "ring")
-    val label = stringResource(if (recording) R.string.stop else R.string.record)
+    val ring by animateColorAsState(
+        when {
+            recording -> BrutColors.Red
+            armed -> BrutColors.Amber
+            else -> BrutColors.Edge
+        },
+        label = "ring",
+    )
+    val label = stringResource(
+        when {
+            recording -> R.string.stop
+            armed -> R.string.disarm
+            else -> R.string.record
+        },
+    )
     Box(
         modifier
             .size(92.dp)
@@ -82,6 +95,8 @@ fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modi
         Canvas(Modifier.size(92.dp)) {
             val r = size.minDimension / 2
             if (recording) drawCircle(BrutColors.Red.copy(alpha = glow * 0.35f), r)
+            // Armée : l'anneau ambre respire, la prise attend le signal.
+            if (armed) drawCircle(BrutColors.Amber.copy(alpha = glow * 0.30f), r)
             drawCircle(
                 Brush.verticalGradient(listOf(Color(0xFF3E372F), Color(0xFF171410))),
                 r * 0.86f,
@@ -100,6 +115,50 @@ fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modi
                 drawCircle(red, r * 0.40f)
                 drawCircle(Color.White.copy(alpha = 0.18f), r * 0.40f, center - Offset(0f, r * 0.06f), style = Stroke(1.5.dp.toPx()))
             }
+        }
+    }
+}
+
+/**
+ * Bouton de repère : large, rond, ambre, posé à côté de REC pendant la prise. On le
+ * trouve au toucher sans regarder l'écran ; une vibration confirme chaque repère.
+ */
+@Composable
+fun MarkerButton(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = LocalHapticFeedback.current
+    val label = stringResource(R.string.marker_button)
+    Box(
+        modifier
+            .size(76.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(76.dp)) {
+            val r = size.minDimension / 2
+            drawCircle(Brush.verticalGradient(listOf(Color(0xFF3E372F), Color(0xFF171410))), r * 0.92f)
+            drawCircle(BrutColors.Amber, r * 0.92f, style = Stroke(2.dp.toPx()))
+            // Triangle de repère, comme sur la forme d'onde.
+            val t = r * 0.32f
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(center.x - t, center.y - t * 0.9f)
+                lineTo(center.x + t, center.y - t * 0.9f)
+                lineTo(center.x, center.y + t * 0.9f)
+                close()
+            }
+            drawPath(path, BrutColors.Amber)
+        }
+        if (count > 0) {
+            Text(
+                count.toString(),
+                style = BrutType.ReadoutSmall,
+                color = BrutColors.Cream,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+            )
         }
     }
 }

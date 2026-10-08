@@ -45,8 +45,12 @@ class RecordingService : Service() {
             controller.stopRecording()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_MARKER) {
+            controller.addMarker()
+            return START_NOT_STICKY
+        }
         ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, buildNotification(0),
+            this, NOTIFICATION_ID, buildNotification(0, armed = controller.state.value.isArmed),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
         )
         if (wakeLock == null) {
@@ -57,13 +61,13 @@ class RecordingService : Service() {
         if (watchJob != null) return START_NOT_STICKY
         watchJob = scope.launch {
             controller.state
-                .map { it.isRecording to it.elapsedSeconds.toLong() }
+                .map { Triple(it.isBusy, it.isArmed, it.elapsedSeconds.toLong()) }
                 .distinctUntilChanged()
-                .collect { (recording, seconds) ->
-                    if (!recording) {
+                .collect { (busy, armed, seconds) ->
+                    if (!busy) {
                         stopSelf()
                     } else {
-                        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(seconds))
+                        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(seconds, armed))
                     }
                 }
         }
@@ -76,7 +80,7 @@ class RecordingService : Service() {
         super.onDestroy()
     }
 
-    private fun buildNotification(seconds: Long): Notification {
+    private fun buildNotification(seconds: Long, armed: Boolean): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -85,12 +89,19 @@ class RecordingService : Service() {
             this, 1, Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val marker = PendingIntent.getService(
+            this, 2, Intent(this, RecordingService::class.java).setAction(ACTION_MARKER),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_record)
-            .setContentTitle(getString(R.string.notification_recording_title))
-            .setContentText(formatDuration(seconds.toDouble(), withHundredths = false))
+            .setContentTitle(getString(if (armed) R.string.notification_armed_title else R.string.notification_recording_title))
+            .setContentText(if (armed) getString(R.string.notification_armed_text) else formatDuration(seconds.toDouble(), withHundredths = false))
             .setContentIntent(open)
-            .addAction(0, getString(R.string.action_stop), stop)
+        // Un repère se pose depuis la notification, sans rallumer l'écran de l'appli.
+        if (!armed) builder.addAction(0, getString(R.string.action_marker), marker)
+        return builder
+            .addAction(0, getString(if (armed) R.string.disarm else R.string.action_stop), stop)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -103,6 +114,7 @@ class RecordingService : Service() {
         const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.gabrielifrim.brut.STOP"
+        private const val ACTION_MARKER = "com.gabrielifrim.brut.REPERE"
         private const val MAX_WAKE_MS = 12 * 60 * 60 * 1000L
 
         fun createChannel(context: Context) {

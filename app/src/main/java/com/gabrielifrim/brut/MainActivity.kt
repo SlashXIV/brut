@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.CaptureSource
+import com.gabrielifrim.brut.audio.TakeOptions
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.RecorderController
 import com.gabrielifrim.brut.library.LibraryController
@@ -177,7 +178,7 @@ class MainActivity : ComponentActivity() {
 
     private val actions = object : ConsoleActions {
         override fun toggleRecording() {
-            if (controller.state.value.isRecording) {
+            if (controller.state.value.isBusy) {
                 controller.stopRecording()
             } else if (controller.startRecording()) {
                 RecordingService.start(this@MainActivity)
@@ -191,6 +192,9 @@ class MainActivity : ComponentActivity() {
         override fun setMeterMode(mode: MeterMode) = controller.setMeterMode(mode)
         override fun setCaptureMode(mode: CaptureSource?) = controller.setCaptureMode(mode)
         override fun resetClip() = controller.resetClip()
+        override fun addMarker() = controller.addMarker()
+        override fun setOptions(options: TakeOptions) = controller.setOptions(options)
+        override fun resetLoudness() = controller.resetLoudness()
         override fun openLibrary() {
             // Pendant une prise, le micro reste ouvert ; sinon on le rend en quittant la console.
             controller.stopMonitoring()

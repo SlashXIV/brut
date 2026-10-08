@@ -53,6 +53,7 @@ import com.gabrielifrim.brut.audio.CaptureEncoding
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.RecorderState
 import com.gabrielifrim.brut.audio.UserMessage
+import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatLongDuration
 import com.gabrielifrim.brut.ui.formatRate
@@ -70,6 +71,9 @@ interface ConsoleActions {
     fun setMeterMode(mode: com.gabrielifrim.brut.audio.MeterMode)
     fun setCaptureMode(mode: com.gabrielifrim.brut.audio.CaptureSource?)
     fun openLibrary()
+    fun addMarker()
+    fun setOptions(options: com.gabrielifrim.brut.audio.TakeOptions)
+    fun resetLoudness()
     fun resetClip()
     fun consumeMessage()
 }
@@ -99,6 +103,10 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                 onModeChange = actions::setMeterMode,
                 onResetClip = actions::resetClip,
                 modifier = modifier,
+                loudness = state.loudness,
+                spectrum = state.spectrum,
+                spectrumCenters = state.spectrumCenters,
+                onResetLoudness = actions::resetLoudness,
             )
         }
         val gainPanel = @Composable {
@@ -167,7 +175,15 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     }
 
     if (showFormat) {
-        FormatSheet(state.format, state.selectedDevice, state.isRecording, actions::setFormat) { showFormat = false }
+        FormatSheet(
+            format = state.format,
+            device = state.selectedDevice,
+            locked = state.isBusy,
+            options = state.options,
+            headphones = state.headphones,
+            onChange = actions::setFormat,
+            onOptions = actions::setOptions,
+        ) { showFormat = false }
     }
     if (showSource) {
         SourceSheet(
@@ -300,6 +316,8 @@ private fun Warnings(state: RecorderState) {
         if (state.isRerouted) add(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()))
         if (c?.silenced == true) add(stringResource(R.string.warning_silenced))
         if (state.lowBattery) add(stringResource(R.string.warning_low_battery, state.batteryPercent))
+        if (state.isArmed) add(stringResource(R.string.warning_armed, "−${(-state.options.triggerDb).toInt()}"))
+        if (state.options.monitor && !state.headphones) add(stringResource(R.string.warning_monitor_no_headphones))
         if (state.lowSpace) add(stringResource(R.string.warning_low_space, formatLongDuration(state.remainingSeconds)))
         // Seulement si le repli est subi : un mode Standard choisi à la main n'a pas à être signalé.
         if (c?.source == CaptureSource.MIC && state.captureMode != CaptureSource.MIC) add(stringResource(R.string.warning_mic_source))
@@ -328,6 +346,7 @@ private fun Warnings(state: RecorderState) {
 
 @Composable
 private fun Transport(state: RecorderState, actions: ConsoleActions) {
+    ToolsSummary(state)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Clock(state.elapsedSeconds, state.isRecording)
@@ -338,12 +357,38 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
             }
             Text(sub, style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        if (state.isRecording) {
+            MarkerButton(state.markerCount, actions::addMarker)
+            Spacer(Modifier.width(10.dp))
+        }
         RecordButton(
             recording = state.isRecording,
             enabled = state.selectedDevice != null && state.capture != null,
             onClick = actions::toggleRecording,
+            armed = state.isArmed,
         )
     }
+}
+
+/** Rappel discret des outils de prise actifs, au-dessus du transport. */
+@Composable
+private fun ToolsSummary(state: RecorderState) {
+    val o = state.options
+    val parts = buildList {
+        if (o.prerollSeconds > 0) add(stringResource(R.string.tools_short_preroll, o.prerollSeconds))
+        if (o.safetyTrack) add(stringResource(R.string.tools_short_safety, "−${(-o.safetyDb).toInt()}"))
+        if (o.trigger) add(stringResource(R.string.tools_short_trigger, "−${(-o.triggerDb).toInt()}"))
+        if (o.monitor) add(stringResource(R.string.tools_short_monitor))
+    }
+    if (parts.isEmpty()) return
+    Text(
+        parts.joinToString("  \u00B7  ") { "\u25B8 $it" },
+        style = engraved(BrutType.Legend),
+        color = BrutColors.Amber,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(bottom = 4.dp),
+    )
 }
 
 /**
@@ -373,7 +418,13 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
     LaunchedEffect(message) {
         if (message != null) {
             shown = message
-            delay(if (message is UserMessage.Saved || message is UserMessage.DeviceConnected) 3500 else 7000)
+            delay(
+                when (message) {
+                    is UserMessage.MarkerAdded -> 1500
+                    is UserMessage.Saved, is UserMessage.DeviceConnected -> 3500
+                    else -> 7000
+                },
+            )
             onDone()
         }
     }
@@ -391,10 +442,12 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
             UserMessage.CaptureResumed -> stringResource(R.string.msg_capture_resumed)
             UserMessage.StoppedLowBattery -> stringResource(R.string.msg_stopped_battery)
             UserMessage.StoppedNoSpace -> stringResource(R.string.msg_stopped_space)
+            is UserMessage.MarkerAdded -> stringResource(R.string.msg_marker, m.number)
+            UserMessage.MonitorNeedsHeadphones -> stringResource(R.string.warning_monitor_no_headphones)
         }
         val accent = when (m) {
             is UserMessage.Saved, is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Green
-            UserMessage.CaptureResumed -> BrutColors.Amber
+            UserMessage.CaptureResumed, is UserMessage.MarkerAdded, UserMessage.MonitorNeedsHeadphones -> BrutColors.Amber
             else -> BrutColors.Red
         }
         Text(

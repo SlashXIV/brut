@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.ChannelLevel
+import com.gabrielifrim.brut.audio.LoudnessReading
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.theme.BrutColors
@@ -87,6 +88,10 @@ fun MeterBridge(
     onModeChange: (MeterMode) -> Unit,
     onResetClip: () -> Unit,
     modifier: Modifier = Modifier,
+    loudness: LoudnessReading = LoudnessReading(),
+    spectrum: FloatArray? = null,
+    spectrumCenters: FloatArray = FloatArray(0),
+    onResetLoudness: () -> Unit = {},
 ) {
     Column(
         modifier
@@ -116,6 +121,20 @@ fun MeterBridge(
                 }
                 if (levels.size == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
             }
+            MeterMode.LUFS -> LufsPanel(
+                loudness, onResetLoudness,
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+            )
+            MeterMode.SPECTRUM -> SpectrumView(
+                spectrum, spectrumCenters,
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+            )
             MeterMode.VU -> Column(
                 Modifier
                     .weight(1f)
@@ -134,20 +153,33 @@ fun MeterBridge(
     }
 }
 
-/** Commutateur à deux positions gravées : barres de crête ou aiguilles VU. */
+/**
+ * Commutateur d'affichage : un toucher passe à la position suivante, la position
+ * active est en ambre, les autres restent lisibles pour savoir ce qui vient.
+ */
 @Composable
 private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
+    val labels = listOf(
+        MeterMode.PEAK to stringResource(R.string.meter_mode_peak),
+        MeterMode.VU to stringResource(R.string.meter_mode_vu),
+        MeterMode.LUFS to stringResource(R.string.meter_mode_lufs),
+        MeterMode.SPECTRUM to stringResource(R.string.meter_mode_spectrum),
+    )
     Row(
         Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(BrutColors.Panel)
-            .clickable(role = Role.Switch) { onChange(if (mode == MeterMode.PEAK) MeterMode.VU else MeterMode.PEAK) }
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .clickable(role = Role.Button) {
+                val all = MeterMode.entries
+                onChange(all[(mode.ordinal + 1) % all.size])
+            }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(stringResource(R.string.meter_mode_peak), style = BrutType.Legend, color = if (mode == MeterMode.PEAK) BrutColors.Amber else BrutColors.CreamFaint)
-        Text("  /  ", style = BrutType.Legend, color = BrutColors.CreamFaint)
-        Text(stringResource(R.string.meter_mode_vu), style = BrutType.Legend, color = if (mode == MeterMode.VU) BrutColors.Amber else BrutColors.CreamFaint)
+        labels.forEachIndexed { i, (m, text) ->
+            if (i > 0) Text(" \u00B7 ", style = BrutType.Legend, color = BrutColors.CreamFaint)
+            Text(text, style = BrutType.Legend, color = if (m == mode) BrutColors.Amber else BrutColors.CreamFaint)
+        }
     }
 }
 
