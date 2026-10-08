@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Brut — icône d'application, source de référence.
+
+    Même grammaire que les autres applications de l'auteur (Kalos, Popote, Topo) :
+    une lettre tracée à la main, un trait d'accent fin dessous, les couleurs de la DA.
+
+    Système de coordonnées des icônes adaptatives Android : canevas 108×108, dont
+    seuls les 72×72 centraux sont garantis visibles et seul un cercle de 66 de
+    diamètre survit au masque le plus agressif. Tout le contenu tient dans ce cercle
+    (point le plus éloigné : la graduation extrême, à moins de 28 du centre).
+
+    Ce fichier est la SOURCE. Les VectorDrawable de `app/src/main/res/drawable/`
+    (ic_launcher_background / ic_launcher_foreground / ic_launcher_monochrome) en
+    dérivent : toute modification se fait ici d'abord, puis se reporte dans les XML.
+
+    Le détail : un arc de graduations de vu-mètre au-dessus de la lettre, les deux
+    dernières en rouge, comme la zone de saturation d'un VU de console. C'est le
+    pendant du « 11 / Ka » de Kalos : discret, mais il dit le métier de l'application.
+
+    La lettre est tracée à la main (aucune dépendance à une police) : fût de 8,5,
+    panses de 6,5 à 7, la panse inférieure plus large que la supérieure, comme dans
+    tout B bien dessiné. Hauteur 29, alignée sur le T de Topo.
+
+    Palette (identique à ui/theme/Theme.kt) :
+      fond            #1A1714   (graphite chaud, un ton au-dessus de l'écran)
+      lettre          #EFE6D6   (crème de sérigraphie)
+      trait           #FFB238   (ambre des lampes témoins)
+      graduations     #EFE6D6 à 45 %, zone rouge #FF4B3E
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <defs>
+    <!-- Approximation du masque des lanceurs, pour la prévisualisation seulement. -->
+    <clipPath id="squircle">
+      <path d="M54,0 C86,0 108,22 108,54 C108,86 86,108 54,108 C22,108 0,86 0,54 C0,22 22,0 54,0 Z"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="108" height="108" fill="#1A1714"/>
+
+    <!-- Décalage de 4 vers le bas : l'arc allège le haut, l'ensemble paraissait
+         remonté. Centré ainsi, son milieu optique tombe sur celui du canevas. -->
+    <g transform="translate(0,4)">
+
+    <!-- Graduations de VU : arc centré en (54,60), rayon 33, de −50° à +50°. -->
+    <g stroke-width="1.4" stroke-linecap="round" fill="none">
+      <path stroke="#EFE6D6" stroke-opacity="0.45"
+            d="M28.72,38.79 L31.17,40.84 M33.91,33.82 L35.25,35.56 M40.05,30.09 L41.41,32.99
+               M46.86,27.78 L47.33,29.93 M54.00,27.00 L54.00,30.20 M61.14,27.78 L60.67,29.93
+               M67.95,30.09 L66.59,32.99"/>
+      <path stroke="#FF4B3E" d="M74.09,33.82 L72.75,35.56 M79.28,38.79 L76.83,40.84"/>
+    </g>
+
+    <!-- Lettre B -->
+    <path fill="#EFE6D6" fill-rule="evenodd"
+          d="M41.5,35 H56.5 C62,35 65,38 65,42 C65,45 63.5,47.2 61,48.3
+             C64.5,49.3 66.5,52 66.5,56 C66.5,61 63,64 57,64 H41.5 Z
+             M50,41.5 H55.5 C57.2,41.5 58,42.5 58,43.9 C58,45.4 57.2,46.3 55.5,46.3 H50 Z
+             M50,51.5 H56.5 C58.5,51.5 59.5,52.8 59.5,54.6 C59.5,56.4 58.5,57.6 56.5,57.6 H50 Z"/>
+
+    <!-- Trait d'accent : 2 unités, comme Topo — un trait, pas un bandeau. -->
+    <rect x="38.5" y="70" width="31" height="2" rx="1" fill="#FFB238"/>
+    </g>
+  </g>
+</svg>

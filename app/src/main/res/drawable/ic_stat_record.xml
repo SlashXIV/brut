@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône de notification : le B seul, en blanc (Android impose une silhouette). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateY="8.5" android:scaleX="1.9" android:scaleY="1.9" android:pivotX="54" android:pivotY="54">
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M41.5,35 H56.5 C62,35 65,38 65,42 C65,45 63.5,47.2 61,48.3 C64.5,49.3 66.5,52 66.5,56 C66.5,61 63,64 57,64 H41.5 Z M50,41.5 H55.5 C57.2,41.5 58,42.5 58,43.9 C58,45.4 57.2,46.3 55.5,46.3 H50 Z M50,51.5 H56.5 C58.5,51.5 59.5,52.8 59.5,54.6 C59.5,56.4 58.5,57.6 56.5,57.6 H50 Z" />
+    </group>
+</vector>
