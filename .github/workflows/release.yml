@@ -1,0 +1,48 @@
+name: Publication
+
+# Un tag vX.Y.Z poussé = un APK signé publié dans les Releases.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Vérifier que le tag correspond à la version de l'application
+        run: |
+          version=$(grep -oP 'val brutVersion = "\K[^"]+' app/build.gradle.kts)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME ≠ version $version"; exit 1; }
+
+      - name: Restaurer la clé de signature
+        run: echo "${{ secrets.BRUT_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/brut-release.jks"
+
+      - name: Tests et APK signé
+        env:
+          BRUT_SIGNING_STOREFILE: ${{ runner.temp }}/brut-release.jks
+          BRUT_SIGNING_STOREPASSWORD: ${{ secrets.BRUT_STORE_PASSWORD }}
+          BRUT_SIGNING_KEYALIAS: ${{ secrets.BRUT_KEY_ALIAS }}
+          BRUT_SIGNING_KEYPASSWORD: ${{ secrets.BRUT_KEY_PASSWORD }}
+        run: |
+          ./gradlew testDebugUnitTest assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "Brut-$GITHUB_REF_NAME.apk"
+
+      - name: Créer la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          notes=$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")
+          gh release create "$GITHUB_REF_NAME" "Brut-$GITHUB_REF_NAME.apk" \
+            --title "Brut $GITHUB_REF_NAME" \
+            --notes "${notes:-Voir l'historique des commits.}"
