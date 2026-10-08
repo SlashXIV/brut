@@ -35,6 +35,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureEncoding
@@ -261,11 +268,7 @@ private fun GainRow(state: RecorderState, labels: List<String>, actions: Console
 private fun Transport(state: RecorderState, actions: ConsoleActions) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(
-                formatDuration(state.elapsedSeconds),
-                style = BrutType.Clock,
-                color = if (state.isRecording) BrutColors.Cream else BrutColors.CreamFaint,
-            )
+            Clock(state.elapsedSeconds, state.isRecording)
             val sub = when {
                 state.isRecording && state.fileName != null -> stringResource(R.string.recording_to, state.fileName)
                 state.remainingSeconds in 1..600 -> stringResource(R.string.remaining_low, formatLongDuration(state.remainingSeconds))
@@ -279,6 +282,27 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
             onClick = actions::toggleRecording,
         )
     }
+}
+
+/**
+ * Chrono sur une seule ligne quoi qu'il arrive : les centièmes sont plus petits,
+ * comme sur un enregistreur de terrain, et la taille se réduit si l'écran est étroit.
+ */
+@Composable
+private fun Clock(seconds: Double, recording: Boolean) {
+    val full = formatDuration(seconds)
+    val cut = full.lastIndexOf('.')
+    val text = buildAnnotatedString {
+        append(full.substring(0, cut))
+        withStyle(SpanStyle(fontSize = 0.55.em)) { append(full.substring(cut)) }
+    }
+    BasicText(
+        text,
+        style = BrutType.Clock.copy(color = if (recording) BrutColors.Cream else BrutColors.CreamFaint),
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(minFontSize = 22.sp, maxFontSize = BrutType.Clock.fontSize, stepSize = 1.sp),
+    )
 }
 
 @Composable
