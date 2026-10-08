@@ -38,7 +38,17 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
   douce sur le micro interne
 
 **Réglages**
-- Gain d’entrée par potard, **gauche et droite séparés** ou liés
+- Gain d’entrée par faders, **gauche et droite séparés** ou liés, cran à 0 dB et pas de 0,5 dB
+- Vu-mètre à aiguille (0 VU = −18 dBFS) ou crête-mètres LED, au choix
+- Mode de capture imposable (automatique, brut, sans gain auto, standard)
+- Réglages retrouvés à chaque ouverture
+
+**Bibliothèque**
+- Toutes les prises, triables et cherchables (sans se soucier des accents)
+- Lecture avec forme d’onde, positionnement au doigt, boucle
+- Renommer, partager, supprimer avec corbeille et annulation
+- Métadonnées **Broadcast Wave** (`bext`) et **iXML** dans chaque fichier : date, heure,
+  entrée, gain, mode de capture, noms de pistes — relues par les logiciels de montage
 
 Les prises sont rangées dans `Musique/Brut`, visibles depuis n’importe quel lecteur ou depuis un
 ordinateur branché en USB.
