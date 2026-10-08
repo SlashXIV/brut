@@ -63,4 +63,4 @@ JDK 17 ou plus récent requis (celui d’Android Studio convient).
 
 ## Licence
 
-[GNU AGPL v3](LICENSE). Polices IBM Plex sous licence SIL OFL 1.1.
+[GNU AGPL v3](LICENSE). Polices Barlow et Share Tech Mono sous licence SIL OFL 1.1.
