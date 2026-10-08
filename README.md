@@ -43,6 +43,14 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Mode de capture imposable (automatique, brut, sans gain auto, standard)
 - Réglages retrouvés à chaque ouverture
 
+**Robustesse terrain**
+- Prise interrompue (plantage, batterie, appli tuée) **récupérée** au démarrage suivant
+- Format **RF64** automatique au-delà de 4 Go : pas de limite de durée
+- Micro coupé par un appel : la prise continue et un **repère** marque l’endroit
+- Capture qui lâche en pleine prise : reprise automatique dans le même fichier
+- Alerte batterie faible et espace bas, arrêt propre avant la coupure
+- Dossier de destination au choix, **carte SD** comprise
+
 **Bibliothèque**
 - Toutes les prises, triables et cherchables (sans se soucier des accents)
 - Lecture avec forme d’onde, positionnement au doigt, boucle
@@ -50,8 +58,8 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Métadonnées **Broadcast Wave** (`bext`) et **iXML** dans chaque fichier : date, heure,
   entrée, gain, mode de capture, noms de pistes — relues par les logiciels de montage
 
-Les prises sont rangées dans `Musique/Brut`, visibles depuis n’importe quel lecteur ou depuis un
-ordinateur branché en USB.
+Les prises sont rangées par défaut dans `Musique/Brut`, visibles depuis n’importe quel lecteur ou
+depuis un ordinateur branché en USB, ou dans le dossier de ton choix.
 
 ## Installation
 
