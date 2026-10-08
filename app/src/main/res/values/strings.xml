@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Brut</string>
+
+    <!-- Notification -->
+    <string name="notification_channel_recording">Enregistrement en cours</string>
+    <string name="notification_recording_title">Brut enregistre</string>
+    <string name="action_stop">Arrêter</string>
+
+    <!-- Permission -->
+    <string name="permission_title">Brut a besoin du micro</string>
+    <string name="permission_body">Pour afficher les niveaux et enregistrer, Brut doit accéder à l’entrée audio. Aucune donnée ne quitte ton téléphone : pas de compte, pas de réseau.</string>
+    <string name="permission_grant">Autoriser le micro</string>
+    <string name="permission_settings">Ouvrir les réglages</string>
+
+    <!-- Entrée -->
+    <string name="source_title">Entrée</string>
+    <string name="source_none">Aucune entrée détectée</string>
+    <string name="source_pick_title">Choisir l’entrée</string>
+    <string name="source_pick_hint">Brut n’impose jamais le micro interne : choisis l’entrée qui doit enregistrer.</string>
+    <string name="source_active">utilisée</string>
+    <string name="kind_usb">USB-C</string>
+    <string name="kind_wired">Filaire</string>
+    <string name="kind_builtin">Micro interne</string>
+    <string name="kind_bluetooth">Bluetooth</string>
+    <string name="kind_other">Autre</string>
+    <string name="device_channels_any">canaux non précisés</string>
+    <string name="device_channels">%1$s canaux max.</string>
+    <string name="device_rates_any">fréquences non précisées</string>
+    <string name="device_bluetooth_warning">Le Bluetooth plafonne à 16 kHz : à éviter pour une prise de qualité.</string>
+
+    <!-- Capture réelle -->
+    <string name="capture_unprocessed">Capture brute</string>
+    <string name="capture_voice">Capture sans gain auto</string>
+    <string name="capture_mic">Capture standard</string>
+    <string name="capture_float">flottant 32 bit</string>
+    <string name="capture_pcm16">entier 16 bit</string>
+    <string name="capture_no_effect">aucun effet</string>
+    <string name="capture_device_rate">matériel %1$s</string>
+    <string name="capture_waiting">Ouverture de l’entrée…</string>
+
+    <!-- Alertes -->
+    <string name="warning_rerouted">Android capte depuis « %1$s » au lieu de l’entrée choisie.</string>
+    <string name="warning_silenced">Micro coupé par Android (appel ou autre application).</string>
+    <string name="warning_mic_source">Cet appareil ne propose pas de capture brute : des traitements du constructeur peuvent s’appliquer.</string>
+    <string name="warning_effects">Effets imposés par l’appareil : %1$s</string>
+    <string name="warning_mono_input">Entrée mono : les deux canaux seront identiques.</string>
+    <string name="warning_resampled">Le matériel tourne à %1$s : Android rééchantillonne.</string>
+
+    <!-- Format -->
+    <string name="format_title">Format du fichier</string>
+    <string name="format_subtitle">WAV non compressé, sans aucun traitement automatique.</string>
+    <string name="format_rate">Échantillonnage</string>
+    <string name="format_depth">Résolution</string>
+    <string name="format_channels">Canaux</string>
+    <string name="format_mono">Mono</string>
+    <string name="format_stereo">Stéréo</string>
+    <string name="format_16">16 bit</string>
+    <string name="format_24">24 bit</string>
+    <string name="format_32f">32 bit flottant</string>
+    <string name="format_hint_16">Compatible partout. Bit-exact quand le gain est à 0 dB.</string>
+    <string name="format_hint_24">Le standard du studio : 144 dB de dynamique.</string>
+    <string name="format_hint_32f">Les crêtes au-delà de 0 dBFS sont conservées dans le fichier : rattrapables au montage.</string>
+    <string name="format_data_rate">%1$s par minute</string>
+    <string name="format_short_mono">MONO</string>
+    <string name="format_short_stereo">STÉRÉO</string>
+    <string name="format_locked">Verrouillé pendant l’enregistrement</string>
+
+    <!-- Console -->
+    <string name="channel_left">G</string>
+    <string name="channel_right">D</string>
+    <string name="channel_mono">M</string>
+    <string name="channel_left_long">Canal gauche</string>
+    <string name="channel_right_long">Canal droit</string>
+    <string name="gain">Gain</string>
+    <string name="gain_link">Lier</string>
+    <string name="clip">CLIP</string>
+    <string name="clip_reset">Toucher pour effacer la saturation</string>
+    <string name="meter_peak">CRÊTE</string>
+    <string name="meter_rms">RMS</string>
+    <string name="meter_max">MAX</string>
+    <string name="db_value">%1$s dB</string>
+    <string name="dbfs_floor">−∞</string>
+    <string name="remaining">≈ %1$s disponibles · Musique/Brut</string>
+    <string name="remaining_low">Espace presque plein : ≈ %1$s disponibles</string>
+    <string name="record">Enregistrer</string>
+    <string name="stop">Arrêter</string>
+    <string name="recording_to">→ %1$s</string>
+
+    <!-- Messages -->
+    <string name="msg_saved">Enregistré : %1$s</string>
+    <string name="msg_device_connected">Entrée détectée : %1$s</string>
+    <string name="msg_device_lost">Entrée débranchée : %1$s</string>
+    <string name="msg_stopped_device_lost">« %1$s » débranchée : prise arrêtée et sauvegardée (%2$s). Brut ne bascule jamais en silence sur le micro interne.</string>
+    <string name="msg_size_limit">Limite de 4 Go du WAV atteinte : prise sauvegardée.</string>
+    <string name="msg_write_failed">Écriture impossible (stockage plein ?). La partie déjà enregistrée est conservée.</string>
+    <string name="msg_capture_failed">Impossible d’ouvrir cette entrée avec ce format. Essaie une autre fréquence ou une autre entrée.</string>
+</resources>

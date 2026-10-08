@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Palette « Console analogique » : à garder alignée avec ui/theme/Color.kt -->
+    <color name="brut_graphite">#FF14120F</color>
+    <color name="brut_amber">#FFFFB238</color>
+</resources>
