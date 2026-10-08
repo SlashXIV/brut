@@ -77,6 +77,8 @@
     <string name="channel_right">D</string>
     <string name="channel_mono">M</string>
     <string name="channel_left_long">Canal gauche</string>
+    <string name="channel_left_name">Gauche</string>
+    <string name="channel_right_name">Droite</string>
     <string name="channel_right_long">Canal droit</string>
     <string name="gain">Gain</string>
     <string name="gain_link">Lier G/D</string>
@@ -106,4 +108,38 @@
     <string name="msg_size_limit">Limite de 4 Go du WAV atteinte : prise sauvegardée.</string>
     <string name="msg_write_failed">Écriture impossible (stockage plein ?). La partie déjà enregistrée est conservée.</string>
     <string name="msg_capture_failed">Impossible d’ouvrir cette entrée avec ce format. Essaie une autre fréquence ou une autre entrée.</string>
+
+    <!-- Bibliothèque -->
+    <string name="library_open">Prises</string>
+    <string name="library_title">Prises</string>
+    <string name="library_back">Retour à la console</string>
+    <plurals name="library_count">
+        <item quantity="one">%1$d prise</item>
+        <item quantity="other">%1$d prises</item>
+    </plurals>
+    <string name="library_search">Rechercher…</string>
+    <string name="library_sort">Tri</string>
+    <string name="library_sort_date">Date</string>
+    <string name="library_sort_name">Nom</string>
+    <string name="library_sort_duration">Durée</string>
+    <string name="library_read_all">Afficher aussi les prises d’une installation précédente →</string>
+    <string name="library_loading">Lecture des prises…</string>
+    <string name="library_empty">Aucune prise pour l’instant. Elles apparaîtront ici après le premier enregistrement.</string>
+    <string name="library_no_match">Aucune prise ne correspond à la recherche.</string>
+    <string name="library_unreadable">Fichier illisible</string>
+    <string name="library_loop">Boucle</string>
+    <string name="library_play">Lire</string>
+    <string name="library_pause">Pause</string>
+    <string name="library_waveform">Forme d’onde : toucher pour se placer</string>
+    <string name="library_recording_busy">Lecture indisponible pendant un enregistrement.</string>
+    <string name="library_rename">Renommer</string>
+    <string name="library_share">Partager</string>
+    <string name="library_delete">Supprimer</string>
+    <string name="library_cancel">Annuler</string>
+    <string name="library_rename_title">Renommer la prise</string>
+    <string name="library_rename_hint">L’extension .wav est ajoutée automatiquement.</string>
+    <string name="library_trashed">« %1$s » mise à la corbeille</string>
+    <string name="library_undo">Annuler</string>
+    <string name="library_renamed">Renommée : %1$s</string>
+    <string name="library_failed">Opération impossible sur cette prise.</string>
 </resources>

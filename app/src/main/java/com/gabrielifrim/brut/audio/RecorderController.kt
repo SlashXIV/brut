@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
+import com.gabrielifrim.brut.R
+import java.time.LocalDateTime
 
 enum class Phase { STOPPED, MONITORING, RECORDING }
 
@@ -74,7 +76,11 @@ data class RecorderState(
  * Chef d'orchestre : choix de l'entrée, format, gain, écoute des niveaux et prises.
  * Vit aussi longtemps que l'application, pour que l'enregistrement survive à l'écran.
  */
-class RecorderController(context: Context) {
+class RecorderController(private val context: Context) {
+
+    private val appVersion: String = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }.getOrNull() ?: "?"
 
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val deviceRepository = InputDeviceRepository(context)
@@ -198,14 +204,27 @@ class RecorderController(context: Context) {
     fun startRecording(): Boolean {
         if (_state.value.isRecording) return true
         val e = engine ?: openEngine() ?: return false
+        val start = LocalDateTime.now()
         val file = try {
-            storage.create()
+            storage.create(start)
         } catch (_: Exception) {
             _state.update { it.copy(message = UserMessage.WriteFailed) }
             return false
         }
         val writer = try {
-            WavWriter(file.channel, e.format)
+            val bext = bextFor(file.displayName, start, e.format)
+            val tracks = if (e.format.channels == 2) {
+                listOf(context.getString(R.string.channel_left_name), context.getString(R.string.channel_right_name))
+            } else {
+                listOf(context.getString(R.string.format_mono))
+            }
+            WavWriter(
+                file.channel, e.format,
+                listOf(
+                    Bext.CHUNK_ID to bext.encode(),
+                    Ixml.CHUNK_ID to Ixml.encode(bext.description, "Brut", bext.originatorReference, tracks),
+                ),
+            )
         } catch (_: IOException) {
             file.discard()
             _state.update { it.copy(message = UserMessage.WriteFailed) }
@@ -217,6 +236,35 @@ class RecorderController(context: Context) {
         _state.update { it.copy(phase = Phase.RECORDING, fileName = file.displayName, framesWritten = 0) }
         return true
     }
+
+    /** Décrit la chaîne d'enregistrement dans le fichier lui-même (lisible par les logiciels de montage). */
+    private fun bextFor(fileName: String, start: LocalDateTime, format: AudioFormatSpec): Bext {
+        val s = _state.value
+        // Le micro interne porte le nom technique du téléphone : on écrit plutôt ce qu'il est.
+        val device = s.selectedDevice?.let { d ->
+            when {
+                d.kind == InputKind.BUILTIN -> context.getString(R.string.kind_builtin) + (d.address.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
+                d.productName.isBlank() -> d.kind.name
+                else -> d.productName
+            }
+        } ?: "?"
+        val gains = if (format.channels == 2) {
+            "gain G ${signedDb(s.gainDb[0])} dB / D ${signedDb(s.gainDb[1])} dB"
+        } else {
+            "gain ${signedDb(s.gainDb[0])} dB"
+        }
+        val source = s.capture?.source?.name ?: "?"
+        return Bext(
+            description = "Entrée : $device ; $gains ; capture $source ; enregistré sans traitement par Brut",
+            originator = "Brut $appVersion",
+            originatorReference = fileName.removeSuffix(".wav"),
+            date = start,
+            timeReference = start.toLocalTime().toNanoOfDay() / 1_000_000_000L * format.sampleRate,
+            codingHistory = Bext.codingHistoryFor(format, "Brut $appVersion"),
+        )
+    }
+
+    private fun signedDb(db: Float) = String.format(java.util.Locale.FRANCE, "%+.1f", db)
 
     fun stopRecording(message: UserMessage? = null) {
         val e = engine ?: return

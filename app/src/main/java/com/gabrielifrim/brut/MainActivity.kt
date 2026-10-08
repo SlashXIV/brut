@@ -47,6 +47,14 @@ import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.RecorderController
+import com.gabrielifrim.brut.library.LibraryController
+import com.gabrielifrim.brut.library.Take
+import com.gabrielifrim.brut.library.TakeSort
+import com.gabrielifrim.brut.ui.library.LibraryActions
+import com.gabrielifrim.brut.ui.library.LibraryScreen
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.compose.runtime.LaunchedEffect
 import com.gabrielifrim.brut.service.RecordingService
 import com.gabrielifrim.brut.ui.console.ConsoleActions
 import com.gabrielifrim.brut.ui.console.ConsoleScreen
@@ -57,9 +65,18 @@ import com.gabrielifrim.brut.ui.theme.BrutType
 class MainActivity : ComponentActivity() {
 
     private val controller: RecorderController get() = (application as BrutApp).controller
+    private val library: LibraryController get() = (application as BrutApp).library
+
+    /** Écran affiché : la console ou la bibliothèque des prises. */
+    private var screen by mutableStateOf(Screen.CONSOLE)
+    private var canReadAll by mutableStateOf(false)
+    private lateinit var readAllLauncher: ActivityResultLauncher<String>
+    private lateinit var consentLauncher: ActivityResultLauncher<IntentSenderRequest>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerLaunchers()
+        savedInstanceState?.getString(KEY_SCREEN)?.let { screen = Screen.valueOf(it) }
         // Console toujours sombre : icônes claires quel que soit le thème du système.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -74,21 +91,72 @@ class MainActivity : ComponentActivity() {
                 }
                 LifecycleEventEffect(Lifecycle.Event.ON_START) {
                     granted = hasMicPermission()
-                    if (granted) controller.startMonitoring()
+                    canReadAll = hasReadPermission()
+                    // La bibliothèque libère le micro : inutile de capter pendant qu'on réécoute.
+                    if (granted && screen == Screen.CONSOLE) controller.startMonitoring()
                 }
                 LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+                    library.player.pause()
                     controller.stopMonitoring()
                 }
 
                 if (granted) {
                     val state by controller.state.collectAsStateWithLifecycle()
-                    ConsoleScreen(state, actions)
+                    when (screen) {
+                        Screen.CONSOLE -> ConsoleScreen(state, actions)
+                        Screen.LIBRARY -> {
+                            val lib by library.state.collectAsStateWithLifecycle()
+                            val player by library.player.state.collectAsStateWithLifecycle()
+                            LaunchedEffect(lib.consent) {
+                                lib.consent?.let { consentLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+                            }
+                            LibraryScreen(lib, player, canReadAll, state.isRecording, libraryActions)
+                        }
+                    }
                 } else {
                     PermissionScreen(onGrant = { launcher.launch(permissionsToAsk()) })
                 }
             }
         }
     }
+
+    private fun registerLaunchers() {
+        readAllLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+            canReadAll = ok
+            if (ok) library.refresh()
+        }
+        consentLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            library.onConsentResult(result.resultCode == RESULT_OK)
+        }
+    }
+
+    private fun showConsole() {
+        library.player.stop()
+        screen = Screen.CONSOLE
+        controller.startMonitoring()
+    }
+
+    private val libraryActions = object : LibraryActions {
+        override fun back() = showConsole()
+        override fun select(take: Take) = library.select(take)
+        override fun togglePlay() = library.player.toggle()
+        override fun seek(fraction: Float) = library.player.seekTo(fraction)
+        override fun setLoop(loop: Boolean) = library.player.setLoop(loop)
+        override fun rename(take: Take, name: String) = library.rename(take, name)
+        override fun share(take: Take) = startActivity(library.shareIntent(take))
+        override fun trash(take: Take) = library.trash(take)
+        override fun undoTrash(take: Take) = library.undoTrash(take)
+        override fun setQuery(query: String) = library.setQuery(query)
+        override fun setSort(sort: TakeSort) = library.setSort(sort)
+        override fun requestReadAll() = readAllLauncher.launch(readPermission())
+        override fun consumeMessage() = library.consumeMessage()
+    }
+
+    private fun readPermission() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    private fun hasReadPermission() =
+        ContextCompat.checkSelfPermission(this, readPermission()) == PackageManager.PERMISSION_GRANTED
 
     private val actions = object : ConsoleActions {
         override fun toggleRecording() {
@@ -106,7 +174,18 @@ class MainActivity : ComponentActivity() {
         override fun setMeterMode(mode: MeterMode) = controller.setMeterMode(mode)
         override fun setCaptureMode(mode: CaptureSource?) = controller.setCaptureMode(mode)
         override fun resetClip() = controller.resetClip()
+        override fun openLibrary() {
+            // Pendant une prise, le micro reste ouvert ; sinon on le rend en quittant la console.
+            controller.stopMonitoring()
+            library.refresh()
+            screen = Screen.LIBRARY
+        }
         override fun consumeMessage() = controller.consumeMessage()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_SCREEN, screen.name)
     }
 
     private fun hasMicPermission() =
@@ -163,3 +242,7 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         }
     }
 }
+
+private enum class Screen { CONSOLE, LIBRARY }
+
+private const val KEY_SCREEN = "ecran"

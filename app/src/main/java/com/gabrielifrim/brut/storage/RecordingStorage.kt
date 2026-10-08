@@ -34,8 +34,8 @@ class RecordingFile(
  */
 class RecordingStorage(private val context: Context) {
 
-    fun create(): RecordingFile {
-        val name = "Brut_" + LocalDateTime.now().format(NAME_FORMAT) + ".wav"
+    fun create(start: LocalDateTime = LocalDateTime.now()): RecordingFile {
+        val name = "Brut_" + start.format(NAME_FORMAT) + ".wav"
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) createInMediaStore(name) else createLegacy(name)
     }
 

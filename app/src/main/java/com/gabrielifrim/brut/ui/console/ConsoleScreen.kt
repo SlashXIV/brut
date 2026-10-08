@@ -69,6 +69,7 @@ interface ConsoleActions {
     fun setGainLinked(linked: Boolean)
     fun setMeterMode(mode: com.gabrielifrim.brut.audio.MeterMode)
     fun setCaptureMode(mode: com.gabrielifrim.brut.audio.CaptureSource?)
+    fun openLibrary()
     fun resetClip()
     fun consumeMessage()
 }
@@ -122,7 +123,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                     // Le transport reste fixé en bas : le bouton REC ne doit jamais défiler hors de vue.
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                            Header(state, onFormat = { showFormat = true })
+                            Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                             Spacer(Modifier.height(10.dp))
                             SourceStrip(state, onClick = { showSource = true })
                             Warnings(state)
@@ -135,7 +136,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                 }
                 compact -> Column(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        Header(state, onFormat = { showFormat = true })
+                        Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                         Spacer(Modifier.height(10.dp))
                         SourceStrip(state, onClick = { showSource = true })
                         Warnings(state)
@@ -148,7 +149,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                     Transport(state, actions)
                 }
                 else -> Column(Modifier.fillMaxSize()) {
-                    Header(state, onFormat = { showFormat = true })
+                    Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                     Spacer(Modifier.height(10.dp))
                     SourceStrip(state, onClick = { showSource = true })
                     Warnings(state)
@@ -185,14 +186,27 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
 }
 
 @Composable
-private fun Header(state: RecorderState, onFormat: () -> Unit) {
+private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // Le mot-symbole reprend l'icône : la lettre, puis le trait ambre.
         Column {
             Text(stringResource(R.string.app_name).uppercase(), style = BrutType.Title, color = BrutColors.Cream)
             Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Amber))
         }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            stringResource(R.string.library_open).uppercase() + " \u203A",
+            style = engraved(BrutType.Legend),
+            color = BrutColors.Cream,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(BrutColors.Panel)
+                .clickable(role = Role.Button, onClick = onLibrary)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        )
         Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(10.dp))
         val f = state.format
         val depth = when (f.bitDepth) {
             BitDepth.PCM_16 -> "16"
