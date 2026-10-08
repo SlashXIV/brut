@@ -43,6 +43,14 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Mode de capture imposable (automatique, brut, sans gain auto, standard)
 - Réglages retrouvés à chaque ouverture
 
+**Outils d’ingé son**
+- **Pré-enregistrement** (2, 5 ou 10 s) : l’attaque d’un son qui t’a surpris n’est pas perdue
+- **Piste de sécurité** à −6, −12 ou −18 dB, enregistrée en parallèle
+- **Déclenchement sur seuil** : REC arme la prise, qui démarre dès que le son dépasse le seuil
+- **Repères** pendant la prise, d’un gros bouton ou depuis la notification
+- **Écoute au casque** du signal enregistré
+- Sonie **EBU R128** (instantanée, court terme, intégrée), **crête vraie** et **analyseur de spectre**
+
 **Robustesse terrain**
 - Prise interrompue (plantage, batterie, appli tuée) **récupérée** au démarrage suivant
 - Format **RF64** automatique au-delà de 4 Go : pas de limite de durée
