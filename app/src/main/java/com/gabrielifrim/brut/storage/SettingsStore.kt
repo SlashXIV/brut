@@ -12,6 +12,7 @@ import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.MeterMode
+import com.gabrielifrim.brut.audio.TakeOptions
 import kotlinx.coroutines.flow.first
 
 /** Réglages retrouvés d'une session à l'autre. */
@@ -24,6 +25,7 @@ data class SavedSettings(
     val meterMode: MeterMode = MeterMode.PEAK,
     /** null = automatique. */
     val captureMode: CaptureSource? = null,
+    val options: TakeOptions = TakeOptions(),
 )
 
 private val Context.dataStore by preferencesDataStore(name = "reglages")
@@ -41,6 +43,14 @@ class SettingsStore(private val context: Context) {
             gainLinked = p[LINKED] ?: true,
             deviceKey = p[DEVICE],
             captureMode = p[CAPTURE]?.let { name -> CaptureSource.entries.firstOrNull { it.name == name } },
+            options = TakeOptions(
+                prerollSeconds = p[PREROLL]?.takeIf { it in TakeOptions.PREROLL_CHOICES } ?: 0,
+                safetyTrack = p[SAFETY] ?: false,
+                safetyDb = p[SAFETY_DB]?.takeIf { it in TakeOptions.SAFETY_CHOICES } ?: -12f,
+                trigger = p[TRIGGER] ?: false,
+                triggerDb = p[TRIGGER_DB]?.takeIf { it in TakeOptions.TRIGGER_CHOICES } ?: -30f,
+                monitor = p[MONITOR] ?: false,
+            ),
             meterMode = p[METER]?.let { name -> MeterMode.entries.firstOrNull { it.name == name } } ?: MeterMode.PEAK,
         )
     }
@@ -54,6 +64,12 @@ class SettingsStore(private val context: Context) {
             p[GAIN_R] = settings.gainDb[1]
             p[LINKED] = settings.gainLinked
             p[METER] = settings.meterMode.name
+            p[PREROLL] = settings.options.prerollSeconds
+            p[SAFETY] = settings.options.safetyTrack
+            p[SAFETY_DB] = settings.options.safetyDb
+            p[TRIGGER] = settings.options.trigger
+            p[TRIGGER_DB] = settings.options.triggerDb
+            p[MONITOR] = settings.options.monitor
             settings.captureMode?.let { p[CAPTURE] = it.name } ?: p.remove(CAPTURE)
             settings.deviceKey?.let { p[DEVICE] = it } ?: p.remove(DEVICE)
         }
@@ -69,5 +85,11 @@ class SettingsStore(private val context: Context) {
         val DEVICE = stringPreferencesKey("entree")
         val METER = stringPreferencesKey("affichage_mesure")
         val CAPTURE = stringPreferencesKey("mode_capture")
+        val PREROLL = intPreferencesKey("pre_enregistrement")
+        val SAFETY = booleanPreferencesKey("piste_securite")
+        val SAFETY_DB = floatPreferencesKey("piste_securite_db")
+        val TRIGGER = booleanPreferencesKey("declenchement")
+        val TRIGGER_DB = floatPreferencesKey("declenchement_db")
+        val MONITOR = booleanPreferencesKey("ecoute_casque")
     }
 }

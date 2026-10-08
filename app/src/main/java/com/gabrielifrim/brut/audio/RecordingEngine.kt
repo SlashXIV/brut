@@ -1,10 +1,12 @@
 package com.gabrielifrim.brut.audio
 
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
@@ -50,6 +52,9 @@ data class CaptureInfo(
 
 class EngineStartException(message: String) : Exception(message)
 
+/** Fichiers d'une prise : le principal et, si demandée, la piste de sécurité. */
+data class TakeWriters(val main: WavWriter, val safety: WavWriter?)
+
 /** L'appareil déclare-t-il une capture sans aucun traitement ? */
 fun supportsUnprocessed(audioManager: AudioManager): Boolean =
     audioManager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
@@ -68,10 +73,12 @@ class RecordingEngine(
     /** Source choisie à la main ; null = automatique (la plus brute disponible). */
     private val forcedSource: CaptureSource?,
     val gain: GainStage,
+    /** Secondes conservées avant l'appui sur REC (0 = pas de pré-enregistrement). */
+    prerollSeconds: Int,
     private val listener: Listener,
 ) {
     interface Listener {
-        fun onLevels(levels: List<ChannelLevel>, framesWritten: Long)
+        fun onLevels(levels: List<ChannelLevel>, framesWritten: Long, loudness: LoudnessReading, spectrum: FloatArray?)
         fun onCaptureInfo(info: CaptureInfo)
         fun onWriteError(error: IOException)
         fun onSizeLimitReached()
@@ -83,9 +90,23 @@ class RecordingEngine(
     private lateinit var source: CaptureSource
     private val effects = mutableListOf<AudioEffect>()
     val meter = LevelMeter(format.sampleRate, format.channels)
+    val loudness = LoudnessMeter(format.sampleRate, format.channels)
+    val spectrum = SpectrumAnalyzer(format.sampleRate, format.channels)
+    private val preroll = PrerollBuffer(format.channels, prerollSeconds * format.sampleRate)
 
     private val writerLock = ReentrantLock()
     private var writer: WavWriter? = null
+    /** Piste de sécurité : même signal, gain abaissé, dans un second fichier. */
+    private var safety: WavWriter? = null
+    private var safetyGain = 1f
+    private var prerollPending = false
+
+    /** Le spectre coûte une FFT par affichage : calculé seulement quand il est visible. */
+    @Volatile var spectrumEnabled = false
+
+    /** Écoute de contrôle au casque (latence de quelques dizaines de ms). */
+    @Volatile var monitorEnabled = false
+    private var monitor: AudioTrack? = null
 
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -168,16 +189,35 @@ class RecordingEngine(
         if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(session)?.let { it.enabled = false; effects += it }
     }
 
-    fun attachWriter(w: WavWriter) = writerLock.withLock { writer = w }
+    /**
+     * Branche les fichiers de la prise. Avec [withPreroll], le contenu du tampon de
+     * pré-enregistrement est écrit en tête au prochain bloc.
+     */
+    fun attachWriter(w: WavWriter, safetyWriter: WavWriter? = null, safetyDb: Float = 0f, withPreroll: Boolean = false) =
+        writerLock.withLock {
+            writer = w
+            safety = safetyWriter
+            safetyGain = LevelMeter.dbToLinear(safetyDb)
+            prerollPending = withPreroll
+            if (!withPreroll) preroll.clear()
+        }
 
-    /** Pose un repère dans le fichier en cours, à la position actuelle de la prise. */
-    fun addMarker(label: String) = writerLock.withLock { writer?.addMarker(label) }
+    /** Trames actuellement disponibles dans le tampon de pré-enregistrement. */
+    val prerollFrames: Int get() = writerLock.withLock { preroll.frames }
 
-    /** Détache le fichier et le finalise (en-tête définitif). */
-    fun detachWriter(): WavWriter? = writerLock.withLock {
-        val w = writer
+    /** Pose un repère dans les fichiers en cours, à la position actuelle de la prise. */
+    fun addMarker(label: String) = writerLock.withLock {
+        writer?.addMarker(label)
+        safety?.addMarker(label)
+    }
+
+    /** Détache les fichiers de la prise (à finaliser par l'appelant). */
+    fun detachWriter(): TakeWriters? = writerLock.withLock {
+        val w = writer ?: return@withLock null
+        val pair = TakeWriters(w, safety)
         writer = null
-        w
+        safety = null
+        pair
     }
 
     fun stop() {
@@ -186,6 +226,8 @@ class RecordingEngine(
         thread = null
         effects.forEach { it.release() }
         effects.clear()
+        monitor?.let { runCatching { it.stop() }; it.release() }
+        monitor = null
         runCatching { record.stop() }
         record.release()
     }
@@ -197,6 +239,7 @@ class RecordingEngine(
         val floats = FloatArray(samples)
         val shorts = if (encoding == CaptureEncoding.PCM_16) ShortArray(samples) else null
         val bytes = ByteArray(samples * format.bitDepth.bytesPerSample)
+        val scratch = FloatArray(samples)
         val publishEvery = format.sampleRate / 30L
         val infoEvery = format.sampleRate.toLong()
         val headerEvery = format.sampleRate * 2L
@@ -222,30 +265,26 @@ class RecordingEngine(
             meter.inspectInput(floats, readFrames)
             val modified = gain.apply(floats, readFrames)
             meter.process(floats, readFrames)
+            loudness.process(floats, readFrames)
+            if (spectrumEnabled) spectrum.push(floats, readFrames)
+            feedMonitor(floats, readFrames)
 
             var written = 0L
             writerLock.withLock {
-                val w = writer ?: return@withLock
-                val n = readFrames * format.channels
-                val length = if (shorts != null && !modified && format.bitDepth == BitDepth.PCM_16) {
-                    SampleConverter.encodePcm16(shorts, n, bytes)
-                } else {
-                    SampleConverter.encode(floats, n, format.bitDepth, bytes)
-                }
-                if (w.wouldOverflow(length)) {
-                    listener.onSizeLimitReached()
+                val w = writer
+                if (w == null) {
+                    preroll.push(floats, readFrames)
                     return@withLock
                 }
-                try {
-                    w.write(bytes, length)
-                    sinceHeader += readFrames
-                    if (sinceHeader >= headerEvery) {
-                        w.updateHeader()
-                        sinceHeader = 0
-                    }
-                } catch (e: IOException) {
-                    writer = null
-                    listener.onWriteError(e)
+                if (prerollPending) {
+                    prerollPending = false
+                    preroll.drain(scratch) { chunk, n -> writeBlock(w, chunk, n, null, false, bytes) }
+                }
+                writeBlock(w, floats, readFrames, shorts, modified, bytes)
+                sinceHeader += readFrames
+                if (sinceHeader >= headerEvery) {
+                    runCatching { w.updateHeader(); safety?.updateHeader() }
+                    sinceHeader = 0
                 }
                 written = w.framesWritten
             }
@@ -253,7 +292,7 @@ class RecordingEngine(
             sincePublish += readFrames
             if (sincePublish >= publishEvery) {
                 sincePublish = 0
-                listener.onLevels(meter.snapshot(), written)
+                listener.onLevels(meter.snapshot(), written, loudness.reading(), if (spectrumEnabled) spectrum.compute() else null)
             }
             sinceInfo += readFrames
             if (sinceInfo >= infoEvery) {
@@ -266,6 +305,71 @@ class RecordingEngine(
             }
         }
     }
+
+    private var safetyScratch = FloatArray(0)
+
+    /** Écrit un bloc dans le fichier principal et, le cas échéant, dans la piste de sécurité. */
+    private fun writeBlock(w: WavWriter, floats: FloatArray, frames: Int, shorts: ShortArray?, modified: Boolean, bytes: ByteArray) {
+        val n = frames * format.channels
+        val length = if (shorts != null && !modified && format.bitDepth == BitDepth.PCM_16) {
+            SampleConverter.encodePcm16(shorts, n, bytes)
+        } else {
+            SampleConverter.encode(floats, n, format.bitDepth, bytes)
+        }
+        if (w.wouldOverflow(length)) {
+            listener.onSizeLimitReached()
+            return
+        }
+        try {
+            w.write(bytes, length)
+            safety?.let { s ->
+                if (safetyScratch.size < n) safetyScratch = FloatArray(n)
+                for (i in 0 until n) safetyScratch[i] = floats[i] * safetyGain
+                s.write(bytes, SampleConverter.encode(safetyScratch, n, format.bitDepth, bytes))
+            }
+        } catch (e: IOException) {
+            writer = null
+            safety = null
+            listener.onWriteError(e)
+        }
+    }
+
+    /**
+     * Renvoie le signal (après gain) vers le casque. Écriture non bloquante : si la
+     * sortie prend du retard, des échantillons d'écoute sont perdus, jamais ceux du fichier.
+     */
+    private fun feedMonitor(floats: FloatArray, frames: Int) {
+        if (!monitorEnabled) {
+            monitor?.let { runCatching { it.pause(); it.flush() } }
+            return
+        }
+        val track = monitor ?: openMonitor()?.also { monitor = it } ?: return
+        if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
+        track.write(floats, 0, frames * format.channels, AudioTrack.WRITE_NON_BLOCKING)
+    }
+
+    private fun openMonitor(): AudioTrack? = runCatching {
+        val mask = if (format.channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+        val min = AudioTrack.getMinBufferSize(format.sampleRate, mask, AudioFormat.ENCODING_PCM_FLOAT)
+        AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(format.sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                    .setChannelMask(mask)
+                    .build(),
+            )
+            .setBufferSizeInBytes(min * 2)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+    }.getOrNull()
 
     private fun captureInfo(): CaptureInfo {
         val routed = record.routedDevice

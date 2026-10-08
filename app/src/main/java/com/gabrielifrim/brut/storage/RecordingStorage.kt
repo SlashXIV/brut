@@ -65,8 +65,9 @@ class RecordingStorage(private val context: Context) {
         prefs.edit { if (tree == null) remove(KEY_FOLDER) else putString(KEY_FOLDER, tree.toString()) }
     }
 
-    fun create(start: LocalDateTime = LocalDateTime.now()): RecordingFile {
-        val name = "Brut_" + start.format(NAME_FORMAT) + ".wav"
+    /** [suffix] distingue les fichiers d'une même prise (ex. « _securite »). */
+    fun create(start: LocalDateTime = LocalDateTime.now(), suffix: String = ""): RecordingFile {
+        val name = "Brut_" + start.format(NAME_FORMAT) + suffix + ".wav"
         val tree = customFolder
         return when {
             tree != null -> createInTree(tree, name)
@@ -84,18 +85,29 @@ class RecordingStorage(private val context: Context) {
 
     // --- Récupération -------------------------------------------------------------
 
-    private fun markInProgress(kind: String, location: String) =
-        prefs.edit(commit = true) { putString(KEY_IN_PROGRESS, "$kind|$location") }
+    // Une prise peut compter plusieurs fichiers (piste de sécurité) : une ligne par fichier.
+    private fun inProgress(): List<String> =
+        prefs.getString(KEY_IN_PROGRESS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
 
-    private fun clearInProgress() = prefs.edit(commit = true) { remove(KEY_IN_PROGRESS) }
+    private fun markInProgress(kind: String, location: String) =
+        prefs.edit(commit = true) { putString(KEY_IN_PROGRESS, (inProgress() + "$kind|$location").joinToString("\n")) }
+
+    private fun clearInProgress(location: String) = prefs.edit(commit = true) {
+        val rest = inProgress().filterNot { it.endsWith("|$location") }
+        if (rest.isEmpty()) remove(KEY_IN_PROGRESS) else putString(KEY_IN_PROGRESS, rest.joinToString("\n"))
+    }
 
     /**
      * Répare et publie la prise restée en cours lors d'un arrêt brutal. À appeler au
      * démarrage, quand aucune prise ne peut être active.
      */
-    fun recoverInterrupted(): RecoveredTake? {
-        val entry = prefs.getString(KEY_IN_PROGRESS, null) ?: return null
-        clearInProgress()
+    fun recoverInterrupted(): List<RecoveredTake> {
+        val entries = inProgress()
+        prefs.edit(commit = true) { remove(KEY_IN_PROGRESS) }
+        return entries.mapNotNull(::recover)
+    }
+
+    private fun recover(entry: String): RecoveredTake? {
         val (kind, location) = entry.split('|', limit = 2).takeIf { it.size == 2 } ?: return null
         return runCatching {
             val resolver = context.contentResolver
@@ -176,14 +188,14 @@ class RecordingStorage(private val context: Context) {
             onPublish = {
                 runCatching { pfd.close() }
                 publish()
-                clearInProgress()
+                clearInProgress(uri.toString())
             },
             onDiscard = {
                 runCatching { pfd.close() }
                 runCatching {
                     if (kind == KIND_DOCUMENT) DocumentsContract.deleteDocument(resolver, uri) else resolver.delete(uri, null, null)
                 }
-                clearInProgress()
+                clearInProgress(uri.toString())
             },
         )
     }
@@ -198,12 +210,12 @@ class RecordingStorage(private val context: Context) {
             onPublish = {
                 runCatching { raf.close() }
                 MediaScannerConnection.scanFile(context, arrayOf(file.path), arrayOf("audio/wav"), null)
-                clearInProgress()
+                clearInProgress(file.path)
             },
             onDiscard = {
                 runCatching { raf.close() }
                 file.delete()
-                clearInProgress()
+                clearInProgress(file.path)
             },
         )
     }

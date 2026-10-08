@@ -26,10 +26,11 @@ import java.io.IOException
 import com.gabrielifrim.brut.R
 import java.time.LocalDateTime
 
-enum class Phase { STOPPED, MONITORING, RECORDING }
+/** ARMED : REC pressé avec le déclenchement sur seuil, la prise attend le signal. */
+enum class Phase { STOPPED, MONITORING, ARMED, RECORDING }
 
 /** Affichage du pont de mesure. */
-enum class MeterMode { PEAK, VU }
+enum class MeterMode { PEAK, VU, LUFS, SPECTRUM }
 
 /** Message destiné à l'utilisateur ; le texte est résolu par l'interface (strings.xml). */
 sealed interface UserMessage {
@@ -44,6 +45,8 @@ sealed interface UserMessage {
     data object CaptureResumed : UserMessage
     data object StoppedLowBattery : UserMessage
     data object StoppedNoSpace : UserMessage
+    data class MarkerAdded(val number: Int) : UserMessage
+    data object MonitorNeedsHeadphones : UserMessage
 }
 
 data class RecorderState(
@@ -66,8 +69,21 @@ data class RecorderState(
     val folderLabel: String = "",
     val batteryPercent: Int = 100,
     val charging: Boolean = true,
+    val options: TakeOptions = TakeOptions(),
+    val loudness: LoudnessReading = LoudnessReading(),
+    /** Niveaux du spectre par bande (null tant que l'affichage spectre n'est pas visible). */
+    val spectrum: FloatArray? = null,
+    val spectrumCenters: FloatArray = FloatArray(0),
+    /** Un casque (filaire, USB ou Bluetooth) est branché : l'écoute de contrôle est possible. */
+    val headphones: Boolean = false,
+    val markerCount: Int = 0,
     val message: UserMessage? = null,
 ) {
+    val isArmed: Boolean get() = phase == Phase.ARMED
+
+    /** Prise en cours ou armée : le micro doit rester ouvert, même écran éteint. */
+    val isBusy: Boolean get() = phase == Phase.RECORDING || phase == Phase.ARMED
+
     /** Batterie à surveiller pendant une prise. */
     val lowBattery: Boolean get() = isRecording && !charging && batteryPercent <= LOW_BATTERY
 
@@ -115,9 +131,16 @@ class RecorderController(private val context: Context) {
     private var engine: RecordingEngine? = null
     private var gain = GainStage(2)
     private var currentFile: RecordingFile? = null
+    private var safetyFile: RecordingFile? = null
     private var lastFreeCheck = 0L
     private var consoleVisible = false
     private var saveJob: Job? = null
+
+    /** Suit le branchement d'un casque, pour l'écoute de contrôle. */
+    private val outputCallback = object : android.media.AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>) = refreshHeadphones()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>) = refreshHeadphones()
+    }
 
     init {
         // Lecture synchrone : quelques octets, et la console doit s'ouvrir avec les bons réglages.
@@ -132,6 +155,7 @@ class RecorderController(private val context: Context) {
                 gainLinked = saved.gainLinked,
                 meterMode = saved.meterMode,
                 captureMode = saved.captureMode,
+                options = saved.options,
                 unprocessedSupported = supportsUnprocessed(audioManager),
                 devices = devices,
                 selectedDeviceId = device?.id,
@@ -143,8 +167,30 @@ class RecorderController(private val context: Context) {
         // Une prise interrompue par un arrêt brutal est réparée et publiée dès le démarrage.
         scope.launch {
             val recovered = withContext(Dispatchers.IO) { storage.recoverInterrupted() }
-            if (recovered != null) _state.update { it.copy(message = UserMessage.Recovered(recovered.name, recovered.seconds)) }
+            recovered.firstOrNull()?.let { r -> _state.update { it.copy(message = UserMessage.Recovered(r.name, r.seconds)) } }
         }
+        audioManager.registerAudioDeviceCallback(outputCallback, android.os.Handler(android.os.Looper.getMainLooper()))
+        refreshHeadphones()
+    }
+
+    /** Sorties sur lesquelles l'écoute de contrôle ne risque pas de repartir dans le micro. */
+    private fun refreshHeadphones() {
+        val types = setOf(
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            android.media.AudioDeviceInfo.TYPE_USB_HEADSET,
+            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+        )
+        val present = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in types }
+        _state.update { it.copy(headphones = present) }
+        applyMonitor()
+    }
+
+    /** L'écoute ne passe jamais par le haut-parleur : elle reviendrait dans le micro (larsen). */
+    private fun applyMonitor() {
+        val s = _state.value
+        engine?.monitorEnabled = s.options.monitor && s.headphones
     }
 
     /** Change le dossier de destination (null = dossier par défaut). Sans effet pendant une prise. */
@@ -183,7 +229,7 @@ class RecorderController(private val context: Context) {
             delay(400)
             val s = _state.value
             withContext(Dispatchers.IO) {
-                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode, s.captureMode))
+                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode, s.captureMode, s.options))
             }
         }
     }
@@ -199,7 +245,7 @@ class RecorderController(private val context: Context) {
     /** Libère le micro quand la console n'est plus visible, sauf pendant une prise. */
     fun stopMonitoring() {
         consoleVisible = false
-        if (_state.value.isRecording) return
+        if (_state.value.isBusy) return
         closeEngine()
         _state.update { it.copy(phase = Phase.STOPPED) }
     }
@@ -245,7 +291,34 @@ class RecorderController(private val context: Context) {
 
     fun setMeterMode(mode: MeterMode) {
         _state.update { it.copy(meterMode = mode) }
+        engine?.spectrumEnabled = mode == MeterMode.SPECTRUM
         persist()
+    }
+
+    fun setOptions(options: TakeOptions) {
+        val s = _state.value
+        if (s.isBusy || options == s.options) return
+        if (options.monitor && !s.options.monitor && !s.headphones) {
+            _state.update { it.copy(message = UserMessage.MonitorNeedsHeadphones) }
+        }
+        _state.update { it.copy(options = options) }
+        persist()
+        applyMonitor()
+        // La taille du tampon de pré-enregistrement est fixée à l'ouverture de la capture.
+        if (options.effectivePrerollSeconds != s.options.effectivePrerollSeconds) restartEngineIfOpen()
+    }
+
+    /** Remet à zéro la sonie intégrée et la crête vraie maximale. */
+    fun resetLoudness() {
+        engine?.loudness?.reset()
+    }
+
+    /** Pose un repère numéroté à l'instant présent de la prise. */
+    fun addMarker() {
+        if (!_state.value.isRecording) return
+        val n = _state.value.markerCount + 1
+        engine?.addMarker(context.getString(R.string.marker_manual, n))
+        _state.update { it.copy(markerCount = n, message = UserMessage.MarkerAdded(n)) }
     }
 
     fun resetClip() {
@@ -256,25 +329,63 @@ class RecorderController(private val context: Context) {
 
     // --- Prise -----------------------------------------------------------------------
 
+    /**
+     * REC. Avec le déclenchement sur seuil, la prise est seulement armée : elle
+     * commencera d'elle-même quand le signal dépassera le seuil.
+     */
     fun startRecording(): Boolean {
-        if (_state.value.isRecording) return true
-        val e = engine ?: openEngine() ?: return false
-        val start = LocalDateTime.now()
+        val s = _state.value
+        if (s.isBusy) return true
+        if (engine == null && openEngine() == null) return false
+        if (s.options.trigger) {
+            _state.update { it.copy(phase = Phase.ARMED, framesWritten = 0) }
+            return true
+        }
+        return beginTake()
+    }
+
+    private fun beginTake(): Boolean {
+        val e = engine ?: return false
+        val s = _state.value
+        // Le fichier commence au début du pré-enregistrement : l'horodatage en tient compte.
+        val prerollFrames = e.prerollFrames
+        val start = LocalDateTime.now().minusNanos(prerollFrames * 1_000_000_000L / e.format.sampleRate)
+        val main = openTakeFile(start, "", e.format, null) ?: return false
+        val safety = if (s.options.safetyTrack) {
+            openTakeFile(start, "_securite", e.format, s.options.safetyDb) ?: run {
+                runCatching { main.second.close() }
+                main.first.discard()
+                return false
+            }
+        } else {
+            null
+        }
+        currentFile = main.first
+        safetyFile = safety?.first
+        e.meter.resetClip()
+        e.loudness.reset()
+        e.attachWriter(main.second, safety?.second, s.options.safetyDb, withPreroll = true)
+        _state.update { it.copy(phase = Phase.RECORDING, fileName = main.first.displayName, framesWritten = 0, markerCount = 0) }
+        return true
+    }
+
+    /** Crée un fichier de la prise et son en-tête (bext + iXML). [safetyDb] non nul = piste de sécurité. */
+    private fun openTakeFile(start: LocalDateTime, suffix: String, format: AudioFormatSpec, safetyDb: Float?): Pair<RecordingFile, WavWriter>? {
         val file = try {
-            storage.create(start)
+            storage.create(start, suffix)
         } catch (_: Exception) {
             _state.update { it.copy(message = UserMessage.WriteFailed) }
-            return false
+            return null
         }
-        val writer = try {
-            val bext = bextFor(file.displayName, start, e.format)
-            val tracks = if (e.format.channels == 2) {
+        return try {
+            val bext = bextFor(file.displayName, start, format, safetyDb)
+            val tracks = if (format.channels == 2) {
                 listOf(context.getString(R.string.channel_left_name), context.getString(R.string.channel_right_name))
             } else {
                 listOf(context.getString(R.string.format_mono))
             }
-            WavWriter(
-                file.channel, e.format,
+            file to WavWriter(
+                file.channel, format,
                 listOf(
                     Bext.CHUNK_ID to bext.encode(),
                     Ixml.CHUNK_ID to Ixml.encode(bext.description, "Brut", bext.originatorReference, tracks),
@@ -283,17 +394,12 @@ class RecorderController(private val context: Context) {
         } catch (_: IOException) {
             file.discard()
             _state.update { it.copy(message = UserMessage.WriteFailed) }
-            return false
+            null
         }
-        currentFile = file
-        e.meter.resetClip()
-        e.attachWriter(writer)
-        _state.update { it.copy(phase = Phase.RECORDING, fileName = file.displayName, framesWritten = 0) }
-        return true
     }
 
     /** Décrit la chaîne d'enregistrement dans le fichier lui-même (lisible par les logiciels de montage). */
-    private fun bextFor(fileName: String, start: LocalDateTime, format: AudioFormatSpec): Bext {
+    private fun bextFor(fileName: String, start: LocalDateTime, format: AudioFormatSpec, safetyDb: Float? = null): Bext {
         val s = _state.value
         // Le micro interne porte le nom technique du téléphone : on écrit plutôt ce qu'il est.
         val device = s.selectedDevice?.let { d ->
@@ -309,8 +415,9 @@ class RecorderController(private val context: Context) {
             "gain ${signedDb(s.gainDb[0])} dB"
         }
         val source = s.capture?.source?.name ?: "?"
+        val safety = safetyDb?.let { " ; piste de sécurité ${signedDb(it)} dB" }.orEmpty()
         return Bext(
-            description = "Entrée : $device ; $gains ; capture $source ; enregistré sans traitement par Brut",
+            description = "Entrée : $device ; $gains$safety ; capture $source ; enregistré sans traitement par Brut",
             originator = "Brut $appVersion",
             originatorReference = fileName.removeSuffix(".wav"),
             date = start,
@@ -323,19 +430,33 @@ class RecorderController(private val context: Context) {
 
     fun stopRecording(message: UserMessage? = null) {
         val e = engine ?: return
-        val writer = e.detachWriter()
+        if (_state.value.isArmed) {
+            // Armée mais jamais déclenchée : aucun fichier n'a été créé.
+            _state.update { it.copy(phase = Phase.MONITORING) }
+            if (!consoleVisible) stopMonitoring()
+            return
+        }
+        val writers = e.detachWriter()
         val file = currentFile
+        val safety = safetyFile
         currentFile = null
+        safetyFile = null
         var finalMessage = message
         if (file != null) {
             try {
                 // Sans writer (erreur d'écriture), on publie tout de même la partie déjà
                 // écrite : son en-tête a été mis à jour au fil de la prise.
-                if (writer != null) writer.close() else file.channel.close()
+                if (writers != null) writers.main.close() else file.channel.close()
                 file.publish()
                 if (finalMessage == null) finalMessage = UserMessage.Saved(file.displayName)
             } catch (_: Exception) {
                 finalMessage = UserMessage.WriteFailed
+            }
+        }
+        if (safety != null) {
+            runCatching {
+                writers?.safety?.close() ?: safety.channel.close()
+                safety.publish()
             }
         }
         _state.update { it.copy(phase = Phase.MONITORING, message = finalMessage ?: it.message) }
@@ -353,10 +474,15 @@ class RecorderController(private val context: Context) {
         gain = GainStage(s.format.channels).also { g ->
             for (c in 0 until s.format.channels) g.setGainDb(c, s.gainDb[c])
         }
-        val e = RecordingEngine(audioManager, s.format, s.selectedDevice?.info, s.captureMode, gain, engineListener)
+        val e = RecordingEngine(
+            audioManager, s.format, s.selectedDevice?.info, s.captureMode, gain,
+            s.options.effectivePrerollSeconds, engineListener,
+        )
         return try {
             e.start()
             engine = e
+            e.spectrumEnabled = s.meterMode == MeterMode.SPECTRUM
+            applyMonitor()
             _state.update { it.copy(phase = Phase.MONITORING, freeBytes = storage.freeBytes()) }
             e
         } catch (_: EngineStartException) {
@@ -374,21 +500,26 @@ class RecorderController(private val context: Context) {
      */
     private fun resumeCapture(): Boolean {
         val old = engine ?: return false
-        val writer = old.detachWriter() ?: return false
+        val writers = old.detachWriter() ?: return false
         closeEngine()
         // Le format est verrouillé pendant une prise : la nouvelle capture est compatible.
         val fresh = openEngine()
         if (fresh == null) {
             // L'entrée ne revient pas : on sauvegarde proprement ce qui a été capté.
-            runCatching { writer.close() }
+            runCatching { writers.main.close() }
+            runCatching { writers.safety?.close() }
             runCatching { currentFile?.publish() }
+            runCatching { safetyFile?.publish() }
             val name = currentFile?.displayName.orEmpty()
             currentFile = null
+            safetyFile = null
             _state.update { it.copy(phase = Phase.STOPPED, message = UserMessage.Saved(name)) }
             return true
         }
-        writer.addMarker(context.getString(R.string.marker_resumed))
-        fresh.attachWriter(writer)
+        val label = context.getString(R.string.marker_resumed)
+        writers.main.addMarker(label)
+        writers.safety?.addMarker(label)
+        fresh.attachWriter(writers.main, writers.safety, _state.value.options.safetyDb, withPreroll = false)
         _state.update { it.copy(phase = Phase.RECORDING, message = UserMessage.CaptureResumed) }
         return true
     }
@@ -447,7 +578,7 @@ class RecorderController(private val context: Context) {
     private fun label(d: InputDevice) = d.productName.ifBlank { d.kind.name }
 
     private val engineListener = object : RecordingEngine.Listener {
-        override fun onLevels(levels: List<ChannelLevel>, framesWritten: Long) {
+        override fun onLevels(levels: List<ChannelLevel>, framesWritten: Long, loudness: LoudnessReading, spectrum: FloatArray?) {
             val now = SystemClock.elapsedRealtime()
             val refreshFree = now - lastFreeCheck > 5_000
             if (refreshFree) lastFreeCheck = now
@@ -457,7 +588,16 @@ class RecorderController(private val context: Context) {
                     levels = levels,
                     framesWritten = if (it.isRecording) framesWritten else it.framesWritten,
                     freeBytes = free ?: it.freeBytes,
+                    loudness = loudness,
+                    spectrum = spectrum,
+                    spectrumCenters = if (spectrum != null && it.spectrumCenters.isEmpty()) engine?.spectrum?.centers ?: it.spectrumCenters else it.spectrumCenters,
                 )
+            }
+            // Déclenchement sur seuil : la première crête au-dessus du seuil lance la prise,
+            // le pré-enregistrement en conserve l'attaque.
+            val s = _state.value
+            if (s.isArmed && levels.any { it.peakDb >= s.options.triggerDb }) {
+                scope.launch { if (_state.value.isArmed && !beginTake()) _state.update { it.copy(phase = Phase.MONITORING) } }
             }
             if (refreshFree) {
                 scope.launch {
