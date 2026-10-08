@@ -132,20 +132,17 @@ private fun Header(state: RecorderState, onFormat: () -> Unit) {
             BitDepth.FLOAT_32 -> "32F"
         }
         val channels = stringResource(if (f.channels == 2) R.string.format_short_stereo else R.string.format_short_mono)
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(BrutColors.Recess)
-                .border(1.dp, BrutColors.Edge, RoundedCornerShape(8.dp))
-                .clickable(role = Role.Button, onClick = onFormat)
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("${formatRate(f.sampleRate)} · $depth BIT · $channels", style = BrutType.Readout, color = BrutColors.Amber)
-        }
+        Readout(
+            "${formatRate(f.sampleRate)} · $depth BIT · $channels",
+            Modifier.clickable(role = Role.Button, onClick = onFormat),
+        )
     }
 }
 
+/**
+ * La source, sur une plaque de rack vissée : l'entrée gravée en tête, puis les
+ * repères d'état de la capture tels qu'Android les a réellement mis en place.
+ */
 @Composable
 private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
     val device = state.selectedDevice
@@ -157,52 +154,61 @@ private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
         capture != null -> BrutColors.Green
         else -> BrutColors.Amber
     }
-    Row(
+    RackPlate(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(BrutColors.Panel)
-            .border(1.dp, BrutColors.Edge, RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(role = Role.Button, onClick = onClick),
+        contentPadding = 10.dp,
     ) {
-        Lamp(lampColor)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.source_title).uppercase(), style = BrutType.Legend, color = BrutColors.CreamDim)
-                if (device != null) {
-                    Text("  " + kindLabel(device.kind).uppercase(), style = BrutType.Legend, color = BrutColors.Amber)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.source_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+                    Text("  →  ", style = BrutType.Legend, color = BrutColors.CreamFaint)
+                    Text(
+                        (device?.let { kindLabel(it.kind) } ?: stringResource(R.string.source_none)).uppercase(),
+                        style = engraved(BrutType.Legend), color = BrutColors.Amber,
+                    )
                 }
+                Text(
+                    if (device != null) deviceName(device) else stringResource(R.string.source_none),
+                    style = engraved(BrutType.BodyStrong), color = BrutColors.Cream,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                CaptureTags(state)
             }
-            Text(
-                if (device != null) deviceName(device) else stringResource(R.string.source_none),
-                style = BrutType.BodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            Text(captureLine(state), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Lamp(lampColor)
+                Text("›", style = BrutType.Title, color = BrutColors.CreamDim)
+            }
         }
-        Text("›", style = BrutType.Title, color = BrutColors.CreamDim)
     }
 }
 
-/** Ce qu'Android fait réellement de l'entrée, en une ligne. */
+/** Repères d'état : mode de capture, encodage, fréquence matérielle, effets. */
 @Composable
-private fun captureLine(state: RecorderState): String {
-    val c = state.capture ?: return stringResource(R.string.capture_waiting)
-    val parts = mutableListOf(
-        stringResource(
-            when (c.source) {
-                CaptureSource.UNPROCESSED -> R.string.capture_unprocessed
-                CaptureSource.VOICE_RECOGNITION -> R.string.capture_voice
-                CaptureSource.MIC -> R.string.capture_mic
-            },
-        ),
-        stringResource(if (c.encoding == CaptureEncoding.FLOAT) R.string.capture_float else R.string.capture_pcm16),
-    )
-    c.deviceSampleRate?.let { parts += stringResource(R.string.capture_device_rate, formatRate(it)) }
-    if (c.activeEffects.isEmpty()) parts += stringResource(R.string.capture_no_effect)
-    return parts.joinToString(" · ")
+private fun CaptureTags(state: RecorderState) {
+    val c = state.capture
+    if (c == null) {
+        Text(stringResource(R.string.capture_waiting), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val (sourceText, sourceColor) = when (c.source) {
+            CaptureSource.UNPROCESSED -> stringResource(R.string.tag_raw) to BrutColors.Green
+            CaptureSource.VOICE_RECOGNITION -> stringResource(R.string.tag_no_agc) to BrutColors.Cream
+            CaptureSource.MIC -> stringResource(R.string.tag_standard) to BrutColors.Amber
+        }
+        StatusTag(sourceText, sourceColor)
+        StatusTag(if (c.encoding == CaptureEncoding.FLOAT) "F32" else "I16", BrutColors.CreamDim)
+        c.deviceSampleRate?.let { StatusTag(formatRate(it).replace(" kHz", "k"), BrutColors.CreamDim) }
+        if (c.activeEffects.isEmpty()) {
+            StatusTag(stringResource(R.string.tag_no_fx), BrutColors.CreamDim)
+        } else {
+            StatusTag(stringResource(R.string.tag_fx), BrutColors.Amber)
+        }
+    }
 }
 
 @Composable

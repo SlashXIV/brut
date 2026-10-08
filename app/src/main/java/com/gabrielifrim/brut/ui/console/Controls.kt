@@ -238,37 +238,3 @@ fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modi
         }
     }
 }
-
-/** Touche de sélection façon bouton poussoir de console, avec sa lampe témoin. */
-@Composable
-fun PadButton(
-    text: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(10.dp)
-    Row(
-        modifier
-            .clip(shape)
-            .background(if (selected) BrutColors.PanelRaised else BrutColors.Recess)
-            .border(1.dp, if (selected) BrutColors.Amber.copy(alpha = 0.6f) else BrutColors.Edge, shape)
-            .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Lamp(BrutColors.Amber, lit = selected)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text,
-            style = BrutType.BodyStrong,
-            color = when {
-                !enabled -> BrutColors.CreamFaint
-                selected -> BrutColors.Cream
-                else -> BrutColors.CreamDim
-            },
-        )
-    }
-}

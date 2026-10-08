@@ -33,27 +33,33 @@ object BrutColors {
 }
 
 object BrutFonts {
-    val Mono = FontFamily(
-        Font(R.font.plex_mono_medium, FontWeight.Medium),
-        Font(R.font.plex_mono_semibold, FontWeight.SemiBold),
+    /** Chiffres d'afficheur : une mono à fût droit, comme sur un écran d'appareil de mesure. */
+    val Display = FontFamily(Font(R.font.share_tech_mono, FontWeight.Normal))
+
+    /** Sérigraphie de face avant : grotesque condensée, lisible en tout petit et en capitales. */
+    val Engraving = FontFamily(
+        Font(R.font.barlow_condensed_medium, FontWeight.Medium),
+        Font(R.font.barlow_condensed_semibold, FontWeight.SemiBold),
+        Font(R.font.barlow_condensed_bold, FontWeight.Bold),
     )
-    val Condensed = FontFamily(
-        Font(R.font.plex_condensed_regular, FontWeight.Normal),
-        Font(R.font.plex_condensed_medium, FontWeight.Medium),
-        Font(R.font.plex_condensed_semibold, FontWeight.SemiBold),
+
+    /** Texte courant (explications, messages) : la même famille, moins serrée. */
+    val Text = FontFamily(
+        Font(R.font.barlow_semicondensed_regular, FontWeight.Normal),
+        Font(R.font.barlow_semicondensed_medium, FontWeight.Medium),
     )
 }
 
 /** Styles nommés par usage, pas par taille : on sait où chacun va. */
 object BrutType {
     /** Sérigraphie : petites capitales espacées, comme sous un potard. */
-    val Legend = TextStyle(fontFamily = BrutFonts.Condensed, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 1.6.sp)
-    val Body = TextStyle(fontFamily = BrutFonts.Condensed, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 20.sp)
-    val BodyStrong = TextStyle(fontFamily = BrutFonts.Condensed, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-    val Title = TextStyle(fontFamily = BrutFonts.Condensed, fontWeight = FontWeight.SemiBold, fontSize = 24.sp)
-    val Readout = TextStyle(fontFamily = BrutFonts.Mono, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-    val ReadoutSmall = TextStyle(fontFamily = BrutFonts.Mono, fontWeight = FontWeight.Medium, fontSize = 10.sp)
-    val Clock = TextStyle(fontFamily = BrutFonts.Mono, fontWeight = FontWeight.SemiBold, fontSize = 44.sp, letterSpacing = (-1).sp)
+    val Legend = TextStyle(fontFamily = BrutFonts.Engraving, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, letterSpacing = 1.8.sp)
+    val Body = TextStyle(fontFamily = BrutFonts.Text, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 20.sp)
+    val BodyStrong = TextStyle(fontFamily = BrutFonts.Engraving, fontWeight = FontWeight.SemiBold, fontSize = 19.sp, letterSpacing = 0.3.sp)
+    val Title = TextStyle(fontFamily = BrutFonts.Engraving, fontWeight = FontWeight.Bold, fontSize = 26.sp, letterSpacing = 1.sp)
+    val Readout = TextStyle(fontFamily = BrutFonts.Display, fontSize = 15.sp)
+    val ReadoutSmall = TextStyle(fontFamily = BrutFonts.Display, fontSize = 12.sp)
+    val Clock = TextStyle(fontFamily = BrutFonts.Display, fontSize = 52.sp, letterSpacing = (-0.5).sp)
 }
 
 @Composable

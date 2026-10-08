@@ -57,11 +57,6 @@ private fun BrutSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SectionLegend(text: String) {
-    Text(text.uppercase(), style = BrutType.Legend, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
-}
-
-@Composable
 fun FormatSheet(
     format: AudioFormatSpec,
     device: InputDevice?,
@@ -76,26 +71,46 @@ fun FormatSheet(
             Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
         }
 
-        SectionLegend(stringResource(R.string.format_rate))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AudioFormatSpec.SUPPORTED_SAMPLE_RATES.forEach { rate ->
-                PadButton(
-                    formatRate(rate), format.sampleRate == rate, !locked,
-                    { onChange(format.copy(sampleRate = rate)) }, Modifier.weight(1f),
+        Spacer(Modifier.height(16.dp))
+        // Trois commutateurs à crans sur une même plaque, comme la face avant d'un enregistreur.
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                RotarySelector(
+                    legend = stringResource(R.string.format_rate_unit),
+                    options = AudioFormatSpec.SUPPORTED_SAMPLE_RATES,
+                    selected = format.sampleRate,
+                    label = { formatRate(it).removeSuffix(" kHz") },
+                    onSelect = { onChange(format.copy(sampleRate = it)) },
+                    enabled = !locked,
+                )
+                RotarySelector(
+                    legend = stringResource(R.string.format_depth_unit),
+                    options = BitDepth.entries,
+                    selected = format.bitDepth,
+                    label = {
+                        when (it) {
+                            BitDepth.PCM_16 -> "16"
+                            BitDepth.PCM_24 -> "24"
+                            BitDepth.FLOAT_32 -> "32F"
+                        }
+                    },
+                    onSelect = { onChange(format.copy(bitDepth = it)) },
+                    enabled = !locked,
+                )
+                val mono = stringResource(R.string.format_short_mono)
+                val stereo = stringResource(R.string.format_short_stereo)
+                RotarySelector(
+                    legend = stringResource(R.string.format_channels),
+                    options = listOf(1, 2),
+                    selected = format.channels,
+                    label = { if (it == 1) mono else stereo },
+                    onSelect = { onChange(format.copy(channels = it)) },
+                    enabled = !locked,
                 )
             }
         }
 
-        SectionLegend(stringResource(R.string.format_depth))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(BitDepth.PCM_16 to R.string.format_16, BitDepth.PCM_24 to R.string.format_24, BitDepth.FLOAT_32 to R.string.format_32f)
-                .forEach { (depth, label) ->
-                    PadButton(
-                        stringResource(label), format.bitDepth == depth, !locked,
-                        { onChange(format.copy(bitDepth = depth)) }, Modifier.weight(1f),
-                    )
-                }
-        }
+        Spacer(Modifier.height(14.dp))
         Text(
             stringResource(
                 when (format.bitDepth) {
@@ -104,14 +119,8 @@ fun FormatSheet(
                     BitDepth.FLOAT_32 -> R.string.format_hint_32f
                 },
             ),
-            style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 8.dp),
+            style = BrutType.Body, color = BrutColors.CreamDim,
         )
-
-        SectionLegend(stringResource(R.string.format_channels))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PadButton(stringResource(R.string.format_mono), format.channels == 1, !locked, { onChange(format.copy(channels = 1)) }, Modifier.weight(1f))
-            PadButton(stringResource(R.string.format_stereo), format.channels == 2, !locked, { onChange(format.copy(channels = 2)) }, Modifier.weight(1f))
-        }
         if (format.channels == 2 && device != null && !device.supportsChannels(2)) {
             Text(stringResource(R.string.warning_mono_input), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
         }
