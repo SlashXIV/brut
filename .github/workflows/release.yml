@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          notes=$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")
+          git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME" > notes.md
           gh release create "$GITHUB_REF_NAME" "Brut-$GITHUB_REF_NAME.apk" \
             --title "Brut $GITHUB_REF_NAME" \
-            --notes "${notes:-Voir l'historique des commits.}"
+            --notes-file notes.md
