@@ -94,7 +94,7 @@
     <string name="meter_max">MAX</string>
     <string name="db_value">%1$s dB</string>
     <string name="dbfs_floor">−∞</string>
-    <string name="remaining">≈ %1$s disponibles · Musique/Brut</string>
+    <string name="remaining">≈ %1$s disponibles · %2$s</string>
     <string name="remaining_low">Espace presque plein : ≈ %1$s disponibles</string>
     <string name="record">Enregistrer</string>
     <string name="stop">Arrêter</string>
@@ -108,6 +108,20 @@
     <string name="msg_size_limit">Limite de 4 Go du WAV atteinte : prise sauvegardée.</string>
     <string name="msg_write_failed">Écriture impossible (stockage plein ?). La partie déjà enregistrée est conservée.</string>
     <string name="msg_capture_failed">Impossible d’ouvrir cette entrée avec ce format. Essaie une autre fréquence ou une autre entrée.</string>
+
+    <!-- Robustesse -->
+    <string name="marker_silenced">Micro coupé par le système</string>
+    <string name="marker_unsilenced">Micro rendu</string>
+    <string name="marker_resumed">Reprise après une interruption de la capture</string>
+    <string name="msg_recovered">Prise interrompue récupérée : %1$s (%2$s)</string>
+    <string name="msg_capture_resumed">La capture s’est interrompue : reprise automatique dans le même fichier, un repère marque le trou.</string>
+    <string name="msg_stopped_battery">Batterie presque vide : prise arrêtée et sauvegardée.</string>
+    <string name="msg_stopped_space">Stockage plein : prise arrêtée et sauvegardée.</string>
+    <string name="warning_low_battery">Batterie faible : %1$d %%. Branche le téléphone pour ne pas perdre la fin.</string>
+    <string name="warning_low_space">Moins de %1$s d’espace disponible.</string>
+    <string name="storage_music">Musique</string>
+    <string name="storage_internal">Stockage interne</string>
+    <string name="storage_sd">Carte SD</string>
 
     <!-- Bibliothèque -->
     <string name="library_open">Prises</string>
@@ -141,5 +155,10 @@
     <string name="library_trashed">« %1$s » mise à la corbeille</string>
     <string name="library_undo">Annuler</string>
     <string name="library_renamed">Renommée : %1$s</string>
+    <string name="folder_title">Dossier des prises</string>
+    <string name="folder_change">Changer</string>
+    <string name="folder_default">Par défaut</string>
+    <string name="library_delete_title">Supprimer définitivement ?</string>
+    <string name="library_delete_body">« %1$s » est dans un dossier choisi, sans corbeille : la suppression ne pourra pas être annulée.</string>
     <string name="library_failed">Opération impossible sur cette prise.</string>
 </resources>

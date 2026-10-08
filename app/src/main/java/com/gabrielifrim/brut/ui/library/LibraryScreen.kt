@@ -93,6 +93,8 @@ interface LibraryActions {
     fun setQuery(query: String)
     fun setSort(sort: TakeSort)
     fun requestReadAll()
+    fun chooseFolder()
+    fun resetFolder()
     fun consumeMessage()
 }
 
@@ -104,10 +106,13 @@ fun LibraryScreen(
     player: PlayerState,
     canReadAll: Boolean,
     recording: Boolean,
+    folderLabel: String,
+    customFolder: Boolean,
     actions: LibraryActions,
 ) {
     BackHandler(onBack = actions::back)
     var renaming by remember { mutableStateOf<Take?>(null) }
+    var deleting by remember { mutableStateOf<Take?>(null) }
 
     Box(
         Modifier
@@ -117,6 +122,8 @@ fun LibraryScreen(
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
             TopBar(state.takes.size, actions::back)
+            Spacer(Modifier.height(10.dp))
+            FolderPlate(folderLabel, customFolder, enabled = !recording, actions)
             Spacer(Modifier.height(10.dp))
             SearchAndSort(state, actions)
             if (!canReadAll) {
@@ -150,6 +157,8 @@ fun LibraryScreen(
                                 recording = recording,
                                 actions = actions,
                                 onRename = { renaming = take },
+                                // Sans corbeille possible, la suppression est définitive : on confirme.
+                                onDelete = { if (take.canUndoDelete) actions.trash(take) else deleting = take },
                             )
                         } else {
                             TakeRow(take) { actions.select(take) }
@@ -160,6 +169,14 @@ fun LibraryScreen(
             }
         }
         LibraryMessageBar(state.message, actions, Modifier.align(Alignment.BottomCenter))
+    }
+
+    deleting?.let { take ->
+        ConfirmDeleteDialog(
+            name = take.baseName,
+            onConfirm = { actions.trash(take); deleting = null },
+            onDismiss = { deleting = null },
+        )
     }
 
     renaming?.let { take ->
@@ -301,13 +318,31 @@ private fun MountedTake(
     recording: Boolean,
     actions: LibraryActions,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TakeHeader(take, Modifier.weight(1f).clickable { actions.select(take) })
             }
-            WaveformView(waveform, player.fraction, enabled = take.info != null, onSeek = actions::seek)
+            val info = take.info
+            val markerFractions = info?.takeIf { it.frames > 0 }?.markers?.map { it.frame.toFloat() / info.frames }.orEmpty()
+            WaveformView(waveform, player.fraction, markerFractions, enabled = info != null, onSeek = actions::seek)
+            // Repères posés pendant la prise (coupure du micro, reprise…) : toucher = s'y placer.
+            info?.markers?.forEach { m ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(3.dp))
+                        .clickable { actions.seek(m.frame.toFloat() / info.frames) }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("▾ " + formatDuration(m.frame.toDouble() / info.sampleRate, withHundredths = false), style = BrutType.ReadoutSmall, color = BrutColors.Amber)
+                    Spacer(Modifier.width(10.dp))
+                    Text(m.label, style = BrutType.Body, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PlayButton(player.playing, enabled = take.info != null && !recording, onClick = actions::togglePlay)
                 Spacer(Modifier.width(12.dp))
@@ -338,7 +373,7 @@ private fun MountedTake(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(stringResource(R.string.library_rename), BrutColors.Cream, Modifier.weight(1f), onRename)
                 ActionButton(stringResource(R.string.library_share), BrutColors.Cream, Modifier.weight(1f)) { actions.share(take) }
-                ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f)) { actions.trash(take) }
+                ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onDelete)
             }
         }
     }
@@ -349,7 +384,7 @@ private fun MountedTake(
  * et rien n'est normalisé. Les crêtes saturées sont en rouge. Toucher ou glisser = se placer.
  */
 @Composable
-private fun WaveformView(waveform: Waveform?, fraction: Float, enabled: Boolean, onSeek: (Float) -> Unit) {
+private fun WaveformView(waveform: Waveform?, fraction: Float, markers: List<Float>, enabled: Boolean, onSeek: (Float) -> Unit) {
     val description = stringResource(R.string.library_waveform)
     Canvas(
         Modifier
@@ -384,6 +419,12 @@ private fun WaveformView(waveform: Waveform?, fraction: Float, enabled: Boolean,
                 }
                 drawRect(color, Offset(x, mid - h), Size(maxOf(step - 1f, 1f), h * 2))
             }
+        }
+        markers.forEach { f ->
+            val mx = f * size.width
+            drawLine(BrutColors.Amber.copy(alpha = 0.7f), Offset(mx, 0f), Offset(mx, size.height), 1.dp.toPx())
+            val t = 5.dp.toPx()
+            drawPath(Path().apply { moveTo(mx - t, 0f); lineTo(mx + t, 0f); lineTo(mx, t * 1.4f); close() }, BrutColors.Amber)
         }
         val x = fraction * size.width
         drawLine(BrutColors.Cream, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
@@ -439,6 +480,58 @@ private fun ActionButton(text: String, color: Color, modifier: Modifier, onClick
         contentAlignment = Alignment.Center,
     ) {
         Text(text.uppercase(), style = engraved(BrutType.Legend), color = color, maxLines = 1)
+    }
+}
+
+/** Dossier de destination des prises, et de quoi le changer. */
+@Composable
+private fun FolderPlate(label: String, custom: Boolean, enabled: Boolean, actions: LibraryActions) {
+    RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.folder_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+                // Le nom du dossier en grand, son chemin en petit : un long chemin ne masque plus l'essentiel.
+                Text(label.substringAfterLast('/'), style = engraved(BrutType.BodyStrong), color = BrutColors.Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if ('/' in label) {
+                    Text(label.substringBeforeLast('/'), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (custom) {
+                SmallAction(stringResource(R.string.folder_default), enabled, actions::resetFolder)
+                Spacer(Modifier.width(6.dp))
+            }
+            SmallAction(stringResource(R.string.folder_change), enabled, actions::chooseFolder)
+        }
+    }
+}
+
+@Composable
+private fun SmallAction(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        text.uppercase(),
+        style = engraved(BrutType.Legend),
+        color = if (enabled) BrutColors.Amber else BrutColors.CreamFaint,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(BrutColors.Recess)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.library_delete_title), style = BrutType.Title, color = BrutColors.Cream)
+                Text(stringResource(R.string.library_delete_body, name), style = BrutType.Body, color = BrutColors.CreamDim)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onDismiss)
+                    ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onConfirm)
+                }
+            }
+        }
     }
 }
 
@@ -507,7 +600,7 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 LibraryMessage.Failed -> stringResource(R.string.library_failed)
             }
             Text(text, style = BrutType.Body, color = BrutColors.Cream, modifier = Modifier.weight(1f))
-            if (m is LibraryMessage.Trashed && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && m.take.file == null) {
+            if (m is LibraryMessage.Trashed && m.take.canUndoDelete) {
                 Text(
                     stringResource(R.string.library_undo).uppercase(),
                     style = BrutType.Legend,

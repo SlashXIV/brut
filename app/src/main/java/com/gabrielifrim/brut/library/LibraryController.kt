@@ -55,9 +55,9 @@ data class LibraryState(
     }
 }
 
-class LibraryController(context: Context) {
+class LibraryController(context: Context, customFolder: () -> android.net.Uri?) {
 
-    private val repository = TakeRepository(context)
+    private val repository = TakeRepository(context, customFolder)
     private val waveforms = WaveformCache(context)
     val player = TakePlayer(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

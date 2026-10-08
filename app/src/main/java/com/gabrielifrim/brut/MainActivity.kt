@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private var canReadAll by mutableStateOf(false)
     private lateinit var readAllLauncher: ActivityResultLauncher<String>
     private lateinit var consentLauncher: ActivityResultLauncher<IntentSenderRequest>
+    private lateinit var folderLauncher: ActivityResultLauncher<Uri?>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,7 +111,12 @@ class MainActivity : ComponentActivity() {
                             LaunchedEffect(lib.consent) {
                                 lib.consent?.let { consentLauncher.launch(IntentSenderRequest.Builder(it).build()) }
                             }
-                            LibraryScreen(lib, player, canReadAll, state.isRecording, libraryActions)
+                            LibraryScreen(
+                                lib, player, canReadAll, state.isRecording,
+                                folderLabel = state.folderLabel,
+                                customFolder = controller.customFolder != null,
+                                actions = libraryActions,
+                            )
                         }
                     }
                 } else {
@@ -127,6 +133,12 @@ class MainActivity : ComponentActivity() {
         }
         consentLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
             library.onConsentResult(result.resultCode == RESULT_OK)
+        }
+        folderLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+            if (tree != null) {
+                controller.setCustomFolder(tree)
+                library.refresh()
+            }
         }
     }
 
@@ -149,6 +161,11 @@ class MainActivity : ComponentActivity() {
         override fun setQuery(query: String) = library.setQuery(query)
         override fun setSort(sort: TakeSort) = library.setSort(sort)
         override fun requestReadAll() = readAllLauncher.launch(readPermission())
+        override fun chooseFolder() = folderLauncher.launch(null)
+        override fun resetFolder() {
+            controller.setCustomFolder(null)
+            library.refresh()
+        }
         override fun consumeMessage() = library.consumeMessage()
     }
 

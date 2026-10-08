@@ -9,6 +9,7 @@ import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.gabrielifrim.brut.audio.WavInfo
@@ -29,7 +30,12 @@ data class Take(
     val info: WavInfo?,
     /** Fichier direct, seulement avant Android 10 (dossier propre à l'application). */
     val file: File? = null,
+    /** Prise rangée dans un dossier choisi (sélecteur de documents) : pas de corbeille système. */
+    val isDocument: Boolean = false,
 ) {
+    /** La suppression peut-elle être annulée (corbeille système, Android 11+) ? */
+    val canUndoDelete: Boolean get() = file == null && !isDocument && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
     val key: String get() = uri.toString()
     val baseName: String get() = name.removeSuffix(".wav").removeSuffix(".WAV")
 }
@@ -46,12 +52,40 @@ sealed interface EditResult {
  * sont toujours visibles ; celles d'une installation précédente demandent la permission
  * de lecture audio, et leur modification passe par une confirmation du système.
  */
-class TakeRepository(private val context: Context) {
+class TakeRepository(
+    private val context: Context,
+    /** Dossier choisi par l'utilisateur, listé en plus du dossier par défaut. */
+    private val customFolder: () -> Uri?,
+) {
 
     private val resolver = context.contentResolver
 
     suspend fun list(): List<Take> = withContext(Dispatchers.IO) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listFromMediaStore() else listLegacy()
+        val default = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listFromMediaStore() else listLegacy()
+        val custom = customFolder()?.let { runCatching { listTree(it) }.getOrDefault(emptyList()) }.orEmpty()
+        (custom + default).sortedByDescending { it.dateMillis }
+    }
+
+    /** Prises d'un dossier choisi via le sélecteur de documents (carte SD comprise). */
+    private fun listTree(tree: Uri): List<Take> {
+        val treeId = DocumentsContract.getTreeDocumentId(tree)
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, treeId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val takes = mutableListOf<Take>()
+        resolver.query(children, projection, null, null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val name = c.getString(1) ?: continue
+                if (!name.endsWith(".wav", ignoreCase = true)) continue
+                val uri = DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(0))
+                takes += Take(uri, name, c.getLong(3), c.getLong(2), readInfo(uri), isDocument = true)
+            }
+        }
+        return takes
     }
 
     private fun listFromMediaStore(): List<Take> {
@@ -100,6 +134,10 @@ class TakeRepository(private val context: Context) {
         take.file?.let { f ->
             return@withContext if (f.renameTo(File(f.parentFile, newName))) EditResult.Done else EditResult.Failed
         }
+        if (take.isDocument) {
+            return@withContext runCatching { DocumentsContract.renameDocument(resolver, take.uri, newName) }
+                .getOrNull()?.let { EditResult.Done } ?: EditResult.Failed
+        }
         guarded(take) {
             resolver.update(take.uri, ContentValues().apply { put(MediaStore.Audio.Media.DISPLAY_NAME, newName) }, null, null)
         }
@@ -111,6 +149,13 @@ class TakeRepository(private val context: Context) {
      */
     suspend fun trash(take: Take): EditResult = withContext(Dispatchers.IO) {
         take.file?.let { return@withContext if (it.delete()) EditResult.Done else EditResult.Failed }
+        if (take.isDocument) {
+            return@withContext if (runCatching { DocumentsContract.deleteDocument(resolver, take.uri) }.getOrDefault(false)) {
+                EditResult.Done
+            } else {
+                EditResult.Failed
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             guarded(take, trash = true) {
                 resolver.update(take.uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_TRASHED, 1) }, null, null)
