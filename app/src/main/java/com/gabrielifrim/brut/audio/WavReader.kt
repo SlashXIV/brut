@@ -16,6 +16,8 @@ data class WavInfo(
     val bext: Bext?,
     /** Note de prise du chunk iXML (UTF-8, accents compris). */
     val note: String? = null,
+    /** Repères (`cue` + `labl`) posés pendant la prise. */
+    val markers: List<Marker> = emptyList(),
 ) {
     /** Ce qu'il faut afficher de la prise : la note iXML, sinon la description bext. */
     val description: String? get() = note ?: bext?.description?.takeIf { it.isNotBlank() }
@@ -36,7 +38,8 @@ object WavReader {
     fun readInfo(channel: SeekableByteChannel): WavInfo {
         val size = channel.size()
         val head = read(channel, 0, 12)
-        if (String(head, 0, 4, Charsets.US_ASCII) != "RIFF" || String(head, 8, 4, Charsets.US_ASCII) != "WAVE") {
+        val riff = String(head, 0, 4, Charsets.US_ASCII)
+        if ((riff != "RIFF" && riff != "RF64") || String(head, 8, 4, Charsets.US_ASCII) != "WAVE") {
             throw IOException("Ce fichier n'est pas un WAV")
         }
         var pos = 12L
@@ -46,12 +49,21 @@ object WavReader {
         var isFloat = false
         var bext: Bext? = null
         var note: String? = null
+        var ds64DataSize = -1L
+        var dataOffset = -1L
+        var dataBytes = 0L
+        val cues = HashMap<Int, Long>()
+        val labels = HashMap<Int, String>()
         while (pos + 8 <= size) {
             val h = ByteBuffer.wrap(read(channel, pos, 8)).order(ByteOrder.LITTLE_ENDIAN)
             val id = String(h.array(), 0, 4, Charsets.US_ASCII)
-            val chunkSize = h.getInt(4).toLong() and 0xFFFF_FFFFL
+            var chunkSize = h.getInt(4).toLong() and 0xFFFF_FFFFL
             val body = pos + 8
             when (id) {
+                "ds64" -> {
+                    val d = ByteBuffer.wrap(read(channel, body, 24)).order(ByteOrder.LITTLE_ENDIAN)
+                    ds64DataSize = d.getLong(8)
+                }
                 "fmt " -> {
                     val f = ByteBuffer.wrap(read(channel, body, minOf(chunkSize, 40L).toInt())).order(ByteOrder.LITTLE_ENDIAN)
                     var tag = f.getShort(0).toInt() and 0xFFFF
@@ -74,17 +86,46 @@ object WavReader {
                 "data" -> {
                     if (channels == 0) throw IOException("Chunk fmt absent")
                     val available = size - body
-                    val declared = if (chunkSize == 0L || chunkSize > available) available else chunkSize
-                    val info = WavInfo(rate, channels, bits, isFloat, body, declared, bext, note)
-                    if (bits !in setOf(16, 24, 32) || (isFloat && bits != 32)) {
-                        throw IOException("Résolution non prise en charge ($bits bit)")
+                    if (chunkSize == 0xFFFF_FFFFL && ds64DataSize >= 0) chunkSize = ds64DataSize
+                    // Taille nulle ou incohérente : fichier interrompu, on se fie à la taille réelle.
+                    chunkSize = if (chunkSize == 0L || chunkSize > available) available else chunkSize
+                    dataOffset = body
+                    dataBytes = chunkSize
+                }
+                "cue " -> if (chunkSize in 4..1_000_000) {
+                    val c = ByteBuffer.wrap(read(channel, body, chunkSize.toInt())).order(ByteOrder.LITTLE_ENDIAN)
+                    val count = c.getInt(0)
+                    for (k in 0 until count) {
+                        val o = 4 + k * 24
+                        if (o + 24 > chunkSize) break
+                        cues[c.getInt(o)] = c.getInt(o + 20).toLong() and 0xFFFF_FFFFL
                     }
-                    return info.copy(dataBytes = declared - declared % info.blockAlign)
+                }
+                "LIST" -> if (chunkSize in 4..1_000_000) {
+                    val l = read(channel, body, chunkSize.toInt())
+                    if (String(l, 0, 4, Charsets.US_ASCII) == "adtl") {
+                        var p = 4
+                        val lb = ByteBuffer.wrap(l).order(ByteOrder.LITTLE_ENDIAN)
+                        while (p + 8 <= l.size) {
+                            val sub = String(l, p, 4, Charsets.US_ASCII)
+                            val n = lb.getInt(p + 4)
+                            if (sub == "labl" && n >= 4 && p + 8 + n <= l.size) {
+                                labels[lb.getInt(p + 8)] = String(l, p + 12, n - 4, Charsets.US_ASCII).trimEnd('\u0000')
+                            }
+                            p += 8 + n + (n and 1)
+                        }
+                    }
                 }
             }
             pos = body + chunkSize + (chunkSize and 1)
         }
-        throw IOException("Chunk data absent")
+        if (dataOffset < 0) throw IOException("Chunk data absent")
+        if (bits !in setOf(16, 24, 32) || (isFloat && bits != 32)) {
+            throw IOException("Résolution non prise en charge ($bits bit)")
+        }
+        val markers = cues.entries.sortedBy { it.value }.map { (id, frame) -> Marker(frame, labels[id].orEmpty()) }
+        val info = WavInfo(rate, channels, bits, isFloat, dataOffset, dataBytes, bext, note, markers)
+        return info.copy(dataBytes = dataBytes - dataBytes % info.blockAlign)
     }
 
     /**
