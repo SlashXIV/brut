@@ -90,4 +90,19 @@ class SignalPathTest {
         meter.process(FloatArray(200), 200)
         assertThat(meter.snapshot().single().holdDb).isLessThan(-30f)
     }
+
+    @Test
+    fun `la saturation d'entree est vue meme quand le gain la masque dans le fichier`() {
+        val meter = LevelMeter(48_000, 1)
+        val gain = GainStage(1)
+        gain.setGainDb(0, -12f)
+        val block = FloatArray(480) { 1f }
+        meter.inspectInput(block, 480)
+        gain.apply(block, 480)
+        gain.apply(block.also { it.fill(1f) }, 480)
+        meter.process(block, 480)
+        val level = meter.snapshot().single()
+        assertThat(level.inputClipped).isTrue()
+        assertThat(level.clipped).isFalse()
+    }
 }

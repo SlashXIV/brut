@@ -58,6 +58,7 @@
     <string name="format_mono">Mono</string>
     <string name="format_short_mono">MONO</string>
     <string name="format_short_stereo">STÉRÉO</string>
+    <string name="format_not_native">Positions grisées : non natives pour cette entrée, Android convertit le signal.</string>
     <string name="format_locked">Verrouillé pendant l’enregistrement</string>
 
     <!-- Console -->
@@ -67,10 +68,15 @@
     <string name="channel_left_long">Canal gauche</string>
     <string name="channel_right_long">Canal droit</string>
     <string name="gain">Gain</string>
-    <string name="gain_link">Lier</string>
+    <string name="gain_link">Lier G/D</string>
+    <string name="gain_decrease">Baisser de 0,5 dB</string>
+    <string name="gain_increase">Monter de 0,5 dB</string>
     <string name="clip">CLIP</string>
+    <string name="clip_input">SAT. ENTRÉE</string>
     <string name="clip_reset">Toucher pour effacer la saturation</string>
     <string name="meter_peak">CRÊTE</string>
+    <string name="meter_mode_peak">CRÊTE</string>
+    <string name="meter_mode_vu">VU</string>
     <string name="meter_rms">RMS</string>
     <string name="meter_max">MAX</string>
     <string name="db_value">%1$s dB</string>

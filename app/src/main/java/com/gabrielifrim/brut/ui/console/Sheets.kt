@@ -82,6 +82,7 @@ fun FormatSheet(
                     label = { formatRate(it).removeSuffix(" kHz") },
                     onSelect = { onChange(format.copy(sampleRate = it)) },
                     enabled = !locked,
+                    isNative = { device?.supportsRate(it) ?: true },
                 )
                 RotarySelector(
                     legend = stringResource(R.string.format_depth_unit),
@@ -106,6 +107,7 @@ fun FormatSheet(
                     label = { if (it == 1) mono else stereo },
                     onSelect = { onChange(format.copy(channels = it)) },
                     enabled = !locked,
+                    isNative = { device?.supportsChannels(it) ?: true },
                 )
             }
         }
@@ -121,6 +123,12 @@ fun FormatSheet(
             ),
             style = BrutType.Body, color = BrutColors.CreamDim,
         )
+        val anyForeign = device != null && (
+            AudioFormatSpec.SUPPORTED_SAMPLE_RATES.any { !device.supportsRate(it) } || !device.supportsChannels(2)
+        )
+        if (anyForeign) {
+            Text(stringResource(R.string.format_not_native), style = BrutType.Body, color = BrutColors.CreamFaint, modifier = Modifier.padding(top = 8.dp))
+        }
         if (format.channels == 2 && device != null && !device.supportsChannels(2)) {
             Text(stringResource(R.string.warning_mono_input), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
         }

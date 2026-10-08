@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +25,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.ChannelLevel
+import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutType
@@ -80,6 +83,8 @@ private val SEGMENT_DB: FloatArray = FloatArray(SEGMENTS) { i ->
 fun MeterBridge(
     levels: List<ChannelLevel>,
     channelLabels: List<String>,
+    mode: MeterMode,
+    onModeChange: (MeterMode) -> Unit,
     onResetClip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -89,23 +94,39 @@ fun MeterBridge(
             .background(BrutColors.Recess)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             levels.forEachIndexed { c, level ->
-                ClipLamp(level.clipped, channelLabels[c], onResetClip)
+                ClipLamp(level, channelLabels[c], onResetClip)
+                Spacer(Modifier.width(8.dp))
             }
+            Spacer(Modifier.weight(1f))
+            ModeSwitch(mode, onModeChange)
         }
-        Row(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            levels.forEachIndexed { c, level ->
-                if (c == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
-                LedBar(level, Modifier.weight(1f).fillMaxHeight())
+        when (mode) {
+            MeterMode.PEAK -> Row(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                levels.forEachIndexed { c, level ->
+                    if (c == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
+                    LedBar(level, Modifier.weight(1f).fillMaxHeight())
+                }
+                if (levels.size == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
             }
-            if (levels.size == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
+            MeterMode.VU -> Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                levels.forEachIndexed { c, level ->
+                    VuMeter(level, channelLabels[c], Modifier.weight(1f).fillMaxWidth())
+                }
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             levels.forEachIndexed { c, level -> Readouts(channelLabels[c], level) }
@@ -113,22 +134,49 @@ fun MeterBridge(
     }
 }
 
+/** Commutateur à deux positions gravées : barres de crête ou aiguilles VU. */
 @Composable
-private fun ClipLamp(clipped: Boolean, label: String, onReset: () -> Unit) {
-    val description = stringResource(R.string.clip_reset)
+private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
     Row(
         Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (clipped) BrutColors.Red else BrutColors.Red.copy(alpha = 0.10f))
+            .clip(RoundedCornerShape(4.dp))
+            .background(BrutColors.Panel)
+            .clickable(role = Role.Switch) { onChange(if (mode == MeterMode.PEAK) MeterMode.VU else MeterMode.PEAK) }
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.meter_mode_peak), style = BrutType.Legend, color = if (mode == MeterMode.PEAK) BrutColors.Amber else BrutColors.CreamFaint)
+        Text("  /  ", style = BrutType.Legend, color = BrutColors.CreamFaint)
+        Text(stringResource(R.string.meter_mode_vu), style = BrutType.Legend, color = if (mode == MeterMode.VU) BrutColors.Amber else BrutColors.CreamFaint)
+    }
+}
+
+/**
+ * Voyant de saturation. Rouge : le fichier est écrêté. Ambre : c'est l'entrée
+ * elle-même (le convertisseur) qui sature, avant le gain — baisser le gain n'y
+ * changera rien, il faut baisser à la source.
+ */
+@Composable
+private fun ClipLamp(level: ChannelLevel, label: String, onReset: () -> Unit) {
+    val description = stringResource(R.string.clip_reset)
+    val (lit, color, text) = when {
+        level.clipped -> Triple(true, BrutColors.Red, stringResource(R.string.clip))
+        level.inputClipped -> Triple(true, BrutColors.Amber, stringResource(R.string.clip_input))
+        else -> Triple(false, BrutColors.Red, stringResource(R.string.clip))
+    }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (lit) color else color.copy(alpha = 0.10f))
             .clickable(onClick = onReset)
             .semantics { contentDescription = description }
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "${stringResource(R.string.clip)} $label",
+            "$text $label",
             style = BrutType.Legend,
-            color = if (clipped) BrutColors.Graphite else BrutColors.Red.copy(alpha = 0.45f),
+            color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.45f),
         )
     }
 }

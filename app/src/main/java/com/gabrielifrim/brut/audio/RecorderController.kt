@@ -8,9 +8,15 @@ import com.gabrielifrim.brut.device.InputDeviceRepository
 import com.gabrielifrim.brut.device.InputKind
 import com.gabrielifrim.brut.storage.RecordingFile
 import com.gabrielifrim.brut.storage.RecordingStorage
+import com.gabrielifrim.brut.storage.SavedSettings
+import com.gabrielifrim.brut.storage.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +25,9 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 
 enum class Phase { STOPPED, MONITORING, RECORDING }
+
+/** Affichage du pont de mesure. */
+enum class MeterMode { PEAK, VU }
 
 /** Message destiné à l'utilisateur ; le texte est résolu par l'interface (strings.xml). */
 sealed interface UserMessage {
@@ -40,6 +49,7 @@ data class RecorderState(
     val levels: List<ChannelLevel> = List(2) { ChannelLevel() },
     val gainDb: List<Float> = listOf(0f, 0f),
     val gainLinked: Boolean = true,
+    val meterMode: MeterMode = MeterMode.PEAK,
     val framesWritten: Long = 0,
     val fileName: String? = null,
     val freeBytes: Long = 0,
@@ -66,6 +76,7 @@ class RecorderController(context: Context) {
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val deviceRepository = InputDeviceRepository(context)
     private val storage = RecordingStorage(context)
+    private val settings = SettingsStore(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _state = MutableStateFlow(RecorderState())
@@ -76,11 +87,39 @@ class RecorderController(context: Context) {
     private var currentFile: RecordingFile? = null
     private var lastFreeCheck = 0L
     private var consoleVisible = false
+    private var saveJob: Job? = null
 
     init {
+        // Lecture synchrone : quelques octets, et la console doit s'ouvrir avec les bons réglages.
+        val saved = runBlocking { settings.load() }
         val devices = deviceRepository.devices.value
-        _state.update { it.copy(devices = devices, selectedDeviceId = deviceRepository.preferredDefault(devices)?.id) }
+        val device = devices.firstOrNull { keyOf(it) == saved.deviceKey } ?: deviceRepository.preferredDefault(devices)
+        _state.update {
+            it.copy(
+                format = saved.format,
+                levels = List(saved.format.channels) { ChannelLevel() },
+                gainDb = saved.gainDb,
+                gainLinked = saved.gainLinked,
+                meterMode = saved.meterMode,
+                devices = devices,
+                selectedDeviceId = device?.id,
+            )
+        }
         scope.launch { deviceRepository.devices.collect(::onDevicesChanged) }
+    }
+
+    private fun keyOf(d: InputDevice) = "${d.kind}|${d.productName}|${d.address}"
+
+    /** Enregistre les réglages, regroupés : un fader qu'on glisse n'écrit qu'une fois. */
+    private fun persist() {
+        saveJob?.cancel()
+        saveJob = scope.launch {
+            delay(400)
+            val s = _state.value
+            withContext(Dispatchers.IO) {
+                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode))
+            }
+        }
     }
 
     // --- Cycle de vie de la console -------------------------------------------------
@@ -104,12 +143,14 @@ class RecorderController(context: Context) {
     fun selectDevice(id: Int) {
         if (_state.value.isRecording) return
         _state.update { it.copy(selectedDeviceId = id) }
+        persist()
         restartEngineIfOpen()
     }
 
     fun setFormat(format: AudioFormatSpec) {
         if (_state.value.isRecording || format == _state.value.format) return
         _state.update { it.copy(format = format, levels = List(format.channels) { ChannelLevel() }) }
+        persist()
         restartEngineIfOpen()
     }
 
@@ -120,11 +161,18 @@ class RecorderController(context: Context) {
         if (s.gainLinked || s.format.channels == 1) gains.indices.forEach { gains[it] = value } else gains[channel] = value
         gains.forEachIndexed { c, g -> if (c < s.format.channels) gain.setGainDb(c, g) }
         _state.update { it.copy(gainDb = gains) }
+        persist()
     }
 
     fun setGainLinked(linked: Boolean) {
         _state.update { it.copy(gainLinked = linked) }
+        persist()
         if (linked) setGain(0, _state.value.gainDb[0])
+    }
+
+    fun setMeterMode(mode: MeterMode) {
+        _state.update { it.copy(meterMode = mode) }
+        persist()
     }
 
     fun resetClip() {

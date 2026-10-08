@@ -18,6 +18,11 @@ data class ChannelLevel(
     /** Saturation verrouillée : reste vraie jusqu'à [LevelMeter.resetClip]. */
     val clipped: Boolean = false,
     val clipCount: Long = 0,
+    /**
+     * Le convertisseur lui-même a saturé (mesuré AVANT le gain). Baisser le gain ne
+     * répare pas ce son-là : il faut baisser le niveau à la source.
+     */
+    val inputClipped: Boolean = false,
 )
 
 /**
@@ -36,6 +41,7 @@ class LevelMeter(private val sampleRate: Int, private val channels: Int) {
     private val clipped = BooleanArray(channels)
     private val clipCount = LongArray(channels)
     private val blockPeak = FloatArray(channels)
+    private val inputClipped = BooleanArray(channels)
 
     private val rmsAlpha = 1.0 - exp(-1.0 / (RMS_TAU_SECONDS * sampleRate))
     private val holdFrames = (HOLD_SECONDS * sampleRate).toLong()
@@ -47,13 +53,28 @@ class LevelMeter(private val sampleRate: Int, private val channels: Int) {
         resetRequested = true
     }
 
-    fun process(interleaved: FloatArray, frames: Int) {
-        if (resetRequested) {
-            resetRequested = false
-            clipped.fill(false)
-            clipCount.fill(0)
-            maxDb.fill(FLOOR_DB)
+    /** À appeler sur le signal brut, avant le gain. */
+    fun inspectInput(interleaved: FloatArray, frames: Int) {
+        consumeReset()
+        var i = 0
+        for (f in 0 until frames) {
+            for (c in 0 until channels) {
+                if (abs(interleaved[i++]) >= CLIP_LINEAR) inputClipped[c] = true
+            }
         }
+    }
+
+    private fun consumeReset() {
+        if (!resetRequested) return
+        resetRequested = false
+        clipped.fill(false)
+        inputClipped.fill(false)
+        clipCount.fill(0)
+        maxDb.fill(FLOOR_DB)
+    }
+
+    fun process(interleaved: FloatArray, frames: Int) {
+        consumeReset()
         blockPeak.fill(0f)
         var i = 0
         for (f in 0 until frames) {
@@ -91,6 +112,7 @@ class LevelMeter(private val sampleRate: Int, private val channels: Int) {
             maxDb = maxDb[c],
             clipped = clipped[c],
             clipCount = clipCount[c],
+            inputClipped = inputClipped[c],
         )
     }
 

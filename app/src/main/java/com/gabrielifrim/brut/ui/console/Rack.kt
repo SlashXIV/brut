@@ -139,6 +139,8 @@ fun <T> RotarySelector(
     onSelect: (T) -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    /** Positions que l'entrée ne gère pas nativement : grisées, mais toujours sélectionnables. */
+    isNative: (T) -> Boolean = { true },
     knobSize: Dp = 50.dp,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -177,8 +179,9 @@ fun <T> RotarySelector(
                     style = engraved(BrutType.Legend).copy(textAlign = TextAlign.Center, letterSpacing = BrutType.Legend.letterSpacing * 0.5f),
                     color = when {
                         !enabled -> BrutColors.CreamFaint
-                        active -> BrutColors.Amber
-                        else -> BrutColors.CreamDim
+                        active -> if (isNative(option)) BrutColors.Amber else BrutColors.Amber.copy(alpha = 0.55f)
+                        isNative(option) -> BrutColors.CreamDim
+                        else -> BrutColors.CreamFaint.copy(alpha = 0.6f)
                     },
                     modifier = Modifier
                         .width(w)

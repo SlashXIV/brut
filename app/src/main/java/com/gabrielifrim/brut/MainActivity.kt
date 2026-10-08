@@ -44,6 +44,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gabrielifrim.brut.audio.AudioFormatSpec
+import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.RecorderController
 import com.gabrielifrim.brut.service.RecordingService
 import com.gabrielifrim.brut.ui.console.ConsoleActions
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
         override fun setFormat(format: AudioFormatSpec) = controller.setFormat(format)
         override fun setGain(channel: Int, db: Float) = controller.setGain(channel, db)
         override fun setGainLinked(linked: Boolean) = controller.setGainLinked(linked)
+        override fun setMeterMode(mode: MeterMode) = controller.setMeterMode(mode)
         override fun resetClip() = controller.resetClip()
         override fun consumeMessage() = controller.consumeMessage()
     }

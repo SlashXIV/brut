@@ -208,6 +208,7 @@ class RecordingEngine(
             val readFrames = read / format.channels
             if (readFrames == 0) continue
 
+            meter.inspectInput(floats, readFrames)
             val modified = gain.apply(floats, readFrames)
             meter.process(floats, readFrames)
 

@@ -62,6 +62,7 @@ interface ConsoleActions {
     fun setFormat(format: com.gabrielifrim.brut.audio.AudioFormatSpec)
     fun setGain(channel: Int, db: Float)
     fun setGainLinked(linked: Boolean)
+    fun setMeterMode(mode: com.gabrielifrim.brut.audio.MeterMode)
     fun resetClip()
     fun consumeMessage()
 }
@@ -92,11 +93,20 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             MeterBridge(
                 levels = state.levels.take(state.format.channels),
                 channelLabels = labels,
+                mode = state.meterMode,
+                onModeChange = actions::setMeterMode,
                 onResetClip = actions::resetClip,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            GainRow(state, labels, actions)
+            GainPanel(
+                stereo = stereo,
+                labels = labels,
+                gains = state.gainDb,
+                linked = state.gainLinked,
+                onGain = actions::setGain,
+                onLinked = actions::setGainLinked,
+            )
             Spacer(Modifier.height(8.dp))
             Transport(state, actions)
         }
@@ -237,35 +247,6 @@ private fun Warnings(state: RecorderState) {
             Lamp(BrutColors.Amber)
             Spacer(Modifier.width(10.dp))
             Text(text, style = BrutType.Body, color = BrutColors.Cream)
-        }
-    }
-}
-
-@Composable
-private fun GainRow(state: RecorderState, labels: List<String>, actions: ConsoleActions) {
-    val stereo = state.format.channels == 2
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(BrutColors.Panel)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val gainLabel = stringResource(R.string.gain).uppercase()
-        GainKnob(
-            state.gainDb[0], { actions.setGain(0, it) },
-            label = "$gainLabel ${labels[0]}",
-            accessibilityLabel = "$gainLabel " + stringResource(if (stereo) R.string.channel_left_long else R.string.format_mono),
-        )
-        if (stereo) {
-            LinkSwitch(state.gainLinked, actions::setGainLinked)
-            GainKnob(
-                state.gainDb[1], { actions.setGain(1, it) },
-                label = "$gainLabel ${labels[1]}",
-                accessibilityLabel = "$gainLabel " + stringResource(R.string.channel_right_long),
-            )
         }
     }
 }
