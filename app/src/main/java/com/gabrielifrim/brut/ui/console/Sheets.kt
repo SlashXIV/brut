@@ -29,6 +29,12 @@ import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
+import com.gabrielifrim.brut.audio.CaptureSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import com.gabrielifrim.brut.device.InputDevice
 import com.gabrielifrim.brut.device.InputKind
 import com.gabrielifrim.brut.ui.formatBytes
@@ -146,8 +152,12 @@ fun SourceSheet(
     devices: List<InputDevice>,
     selectedId: Int?,
     routedId: Int?,
+    captureMode: CaptureSource?,
+    activeSource: CaptureSource?,
+    unprocessedSupported: Boolean,
     locked: Boolean,
     onSelect: (Int) -> Unit,
+    onCaptureMode: (CaptureSource?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BrutSheet(onDismiss) {
@@ -156,50 +166,122 @@ fun SourceSheet(
         if (locked) {
             Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
         }
-        Spacer(Modifier.height(12.dp))
-        if (devices.isEmpty()) {
-            Text(stringResource(R.string.source_none), style = BrutType.Body, color = BrutColors.CreamDim)
+
+        SheetLegend(stringResource(R.string.source_section_inputs))
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
+            Column {
+                if (devices.isEmpty()) {
+                    Text(stringResource(R.string.source_none), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(8.dp))
+                }
+                devices.forEachIndexed { i, device ->
+                    if (i > 0) EngravedRule()
+                    DeviceRow(
+                        device = device,
+                        selected = device.id == selectedId,
+                        routed = device.id == routedId,
+                        enabled = !locked,
+                        onClick = { onSelect(device.id) },
+                    )
+                }
+            }
         }
-        devices.forEach { device ->
-            DeviceRow(
-                device = device,
-                selected = device.id == selectedId,
-                routed = device.id == routedId,
-                enabled = !locked,
-                onClick = { onSelect(device.id) },
-            )
-            Spacer(Modifier.height(8.dp))
+
+        SheetLegend(stringResource(R.string.capture_section))
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
+            Column {
+                val modes = listOf<Triple<CaptureSource?, Int, Int>>(
+                    Triple(null, R.string.capture_mode_auto, R.string.capture_mode_auto_hint),
+                    Triple(CaptureSource.UNPROCESSED, R.string.capture_mode_raw, R.string.capture_mode_raw_hint),
+                    Triple(CaptureSource.VOICE_RECOGNITION, R.string.capture_mode_voice, R.string.capture_mode_voice_hint),
+                    Triple(CaptureSource.MIC, R.string.capture_mode_standard, R.string.capture_mode_standard_hint),
+                )
+                modes.forEachIndexed { i, (mode, title, hint) ->
+                    if (i > 0) EngravedRule()
+                    val available = mode != CaptureSource.UNPROCESSED || unprocessedSupported
+                    RackRow(
+                        selected = captureMode == mode,
+                        lampColor = BrutColors.Amber,
+                        enabled = !locked && available,
+                        onClick = { onCaptureMode(mode) },
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(title).uppercase(), style = engraved(BrutType.Legend), color = if (available) BrutColors.Cream else BrutColors.CreamFaint)
+                            if (mode != null && mode == activeSource) {
+                                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Green)
+                            }
+                        }
+                        Text(
+                            stringResource(if (available) hint else R.string.capture_mode_raw_missing),
+                            style = BrutType.Body, color = BrutColors.CreamDim,
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun DeviceRow(device: InputDevice, selected: Boolean, routed: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
+private fun SheetLegend(text: String) {
+    Text(
+        text.uppercase(),
+        style = engraved(BrutType.Legend),
+        color = BrutColors.CreamDim,
+        modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
+    )
+}
+
+/** Filet gravé entre deux rangées d'une même plaque. */
+@Composable
+private fun EngravedRule() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(2.dp)
+            .drawBehind {
+                drawLine(Color.Black.copy(alpha = 0.6f), Offset(0f, 0f), Offset(size.width, 0f), 1f)
+                drawLine(Color.White.copy(alpha = 0.06f), Offset(0f, 1.5f), Offset(size.width, 1.5f), 1f)
+            },
+    )
+}
+
+/** Rangée sélectionnable d'une plaque : une lampe témoin puis le contenu gravé. */
+@Composable
+private fun RackRow(
+    selected: Boolean,
+    lampColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(if (selected) BrutColors.PanelRaised else BrutColors.Recess)
-            .border(1.dp, if (selected) BrutColors.Amber.copy(alpha = 0.6f) else BrutColors.Edge, shape)
+            .clip(RoundedCornerShape(3.dp))
+            .background(if (selected) BrutColors.Amber.copy(alpha = 0.07f) else Color.Transparent)
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .padding(14.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Lamp(if (routed) BrutColors.Green else BrutColors.Amber, lit = selected || routed)
+        Lamp(lampColor, lit = selected)
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(kindLabel(device.kind).uppercase(), style = BrutType.Legend, color = BrutColors.Amber)
-                if (routed) {
-                    Text("  · " + stringResource(R.string.source_active), style = BrutType.Legend, color = BrutColors.Green)
-                }
+        Column(Modifier.weight(1f), content = content)
+    }
+}
+
+@Composable
+private fun DeviceRow(device: InputDevice, selected: Boolean, routed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    RackRow(selected || routed, if (routed) BrutColors.Green else BrutColors.Amber, enabled, onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(kindLabel(device.kind).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Amber)
+            if (routed) {
+                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Green)
             }
-            Text(deviceName(device), style = BrutType.BodyStrong)
-            Text(deviceDetails(device), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
-            if (device.kind == InputKind.BLUETOOTH) {
-                Text(stringResource(R.string.device_bluetooth_warning), style = BrutType.Body, color = BrutColors.Amber)
-            }
+        }
+        Text(deviceName(device), style = engraved(BrutType.BodyStrong), color = if (selected) BrutColors.Cream else BrutColors.CreamDim)
+        Text(deviceDetails(device), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
+        if (device.kind == InputKind.BLUETOOTH) {
+            Text(stringResource(R.string.device_bluetooth_warning), style = BrutType.Body, color = BrutColors.Amber)
         }
     }
 }
@@ -231,7 +313,10 @@ private fun deviceDetails(device: InputDevice): String {
     val rates = if (device.sampleRates.isEmpty()) {
         stringResource(R.string.device_rates_any)
     } else {
-        device.sampleRates.joinToString(" / ") { formatRate(it) }
+        // Une plage plutôt que la liste complète : certains pilotes en annoncent une dizaine.
+        val lo = device.sampleRates.first()
+        val hi = device.sampleRates.last()
+        if (lo == hi) formatRate(lo) else "${formatRate(lo).removeSuffix(" kHz")} – ${formatRate(hi)}"
     }
     return "$channels · $rates"
 }

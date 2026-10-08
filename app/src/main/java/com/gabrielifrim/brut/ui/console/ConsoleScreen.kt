@@ -68,6 +68,7 @@ interface ConsoleActions {
     fun setGain(channel: Int, db: Float)
     fun setGainLinked(linked: Boolean)
     fun setMeterMode(mode: com.gabrielifrim.brut.audio.MeterMode)
+    fun setCaptureMode(mode: com.gabrielifrim.brut.audio.CaptureSource?)
     fun resetClip()
     fun consumeMessage()
 }
@@ -169,8 +170,15 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     }
     if (showSource) {
         SourceSheet(
-            state.devices, state.selectedDeviceId, state.capture?.routedDeviceId, state.isRecording,
+            devices = state.devices,
+            selectedId = state.selectedDeviceId,
+            routedId = state.capture?.routedDeviceId,
+            captureMode = state.captureMode,
+            activeSource = state.capture?.source,
+            unprocessedSupported = state.unprocessedSupported,
+            locked = state.isRecording,
             onSelect = { actions.selectDevice(it); showSource = false },
+            onCaptureMode = actions::setCaptureMode,
             onDismiss = { showSource = false },
         )
     }

@@ -50,6 +50,9 @@ data class RecorderState(
     val gainDb: List<Float> = listOf(0f, 0f),
     val gainLinked: Boolean = true,
     val meterMode: MeterMode = MeterMode.PEAK,
+    /** Mode de capture imposé ; null = automatique. */
+    val captureMode: CaptureSource? = null,
+    val unprocessedSupported: Boolean = false,
     val framesWritten: Long = 0,
     val fileName: String? = null,
     val freeBytes: Long = 0,
@@ -101,6 +104,8 @@ class RecorderController(context: Context) {
                 gainDb = saved.gainDb,
                 gainLinked = saved.gainLinked,
                 meterMode = saved.meterMode,
+                captureMode = saved.captureMode,
+                unprocessedSupported = supportsUnprocessed(audioManager),
                 devices = devices,
                 selectedDeviceId = device?.id,
             )
@@ -117,7 +122,7 @@ class RecorderController(context: Context) {
             delay(400)
             val s = _state.value
             withContext(Dispatchers.IO) {
-                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode))
+                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode, s.captureMode))
             }
         }
     }
@@ -168,6 +173,13 @@ class RecorderController(context: Context) {
         _state.update { it.copy(gainLinked = linked) }
         persist()
         if (linked) setGain(0, _state.value.gainDb[0])
+    }
+
+    fun setCaptureMode(mode: CaptureSource?) {
+        if (_state.value.isRecording || mode == _state.value.captureMode) return
+        _state.update { it.copy(captureMode = mode) }
+        persist()
+        restartEngineIfOpen()
     }
 
     fun setMeterMode(mode: MeterMode) {
@@ -238,7 +250,7 @@ class RecorderController(context: Context) {
         gain = GainStage(s.format.channels).also { g ->
             for (c in 0 until s.format.channels) g.setGainDb(c, s.gainDb[c])
         }
-        val e = RecordingEngine(audioManager, s.format, s.selectedDevice?.info, gain, engineListener)
+        val e = RecordingEngine(audioManager, s.format, s.selectedDevice?.info, s.captureMode, gain, engineListener)
         return try {
             e.start()
             engine = e

@@ -24,6 +24,17 @@
     <string name="source_pick_title">Choisir l’entrée</string>
     <string name="source_pick_hint">Brut n’impose jamais le micro interne : choisis l’entrée qui doit enregistrer.</string>
     <string name="source_active">utilisée</string>
+    <string name="source_section_inputs">Entrées disponibles</string>
+    <string name="capture_section">Mode de capture</string>
+    <string name="capture_mode_auto">Automatique</string>
+    <string name="capture_mode_auto_hint">Le mode le plus brut que l’appareil accepte. Recommandé.</string>
+    <string name="capture_mode_raw">Brut</string>
+    <string name="capture_mode_raw_hint">Aucun traitement d’Android ni du constructeur.</string>
+    <string name="capture_mode_raw_missing">Non proposé par cet appareil.</string>
+    <string name="capture_mode_voice">Sans gain auto</string>
+    <string name="capture_mode_voice_hint">Pas de contrôle automatique de gain. Repli courant quand le mode brut manque.</string>
+    <string name="capture_mode_standard">Standard</string>
+    <string name="capture_mode_standard_hint">Le micro tel que le voient les autres applis : le constructeur peut y appliquer des traitements.</string>
     <string name="kind_usb">USB-C</string>
     <string name="kind_wired">Filaire</string>
     <string name="kind_builtin">Micro interne</string>

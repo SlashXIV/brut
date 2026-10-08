@@ -50,6 +50,10 @@ data class CaptureInfo(
 
 class EngineStartException(message: String) : Exception(message)
 
+/** L'appareil déclare-t-il une capture sans aucun traitement ? */
+fun supportsUnprocessed(audioManager: AudioManager): Boolean =
+    audioManager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
+
 /**
  * Lit l'entrée audio sur un thread dédié, applique le gain utilisateur, mesure les
  * niveaux et, lorsqu'un [WavWriter] est attaché, écrit dans le fichier.
@@ -61,6 +65,8 @@ class RecordingEngine(
     private val audioManager: AudioManager,
     val format: AudioFormatSpec,
     private val preferredDevice: AudioDeviceInfo?,
+    /** Source choisie à la main ; null = automatique (la plus brute disponible). */
+    private val forcedSource: CaptureSource?,
     val gain: GainStage,
     private val listener: Listener,
 ) {
@@ -88,12 +94,14 @@ class RecordingEngine(
     /** Ouvre la capture en essayant les combinaisons de la plus brute à la plus tolérante. */
     @SuppressLint("MissingPermission")
     fun start() {
-        val sources = buildList {
-            val unprocessed = audioManager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED)
-            if (unprocessed == "true") add(CaptureSource.UNPROCESSED)
+        val automatic = buildList {
+            if (supportsUnprocessed(audioManager)) add(CaptureSource.UNPROCESSED)
             add(CaptureSource.VOICE_RECOGNITION)
             add(CaptureSource.MIC)
         }
+        // Une source imposée passe en tête ; si l'appareil la refuse, la chaîne
+        // automatique prend le relais plutôt que de laisser l'utilisateur sans son.
+        val sources = forcedSource?.let { listOf(it) + (automatic - it) } ?: automatic
         // Fichier 16 bit : capture 16 bit d'abord, pour un chemin strictement bit-exact.
         val encodings = if (format.bitDepth == BitDepth.PCM_16) {
             listOf(CaptureEncoding.PCM_16, CaptureEncoding.FLOAT)
