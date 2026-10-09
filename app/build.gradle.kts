@@ -58,6 +58,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Langues proposées dans les réglages Android (13+) : français par défaut, anglais.
+    androidResources {
+        generateLocaleConfig = true
+    }
 }
 
 dependencies {

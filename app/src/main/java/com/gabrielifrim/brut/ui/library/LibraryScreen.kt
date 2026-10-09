@@ -107,7 +107,7 @@ interface LibraryActions {
     fun cancelExport()
 }
 
-private val DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.FRANCE)
+private fun dateFormat(locale: Locale): DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", locale)
 
 @Composable
 fun LibraryScreen(
@@ -305,8 +305,10 @@ private fun TakeRow(take: Take, onClick: () -> Unit) {
 @Composable
 private fun TakeHeader(take: Take, modifier: Modifier = Modifier) {
     Column(modifier) {
-        val date = Instant.ofEpochMilli(take.dateMillis).atZone(ZoneId.systemDefault()).format(DATE_FORMAT)
-        Text(date.uppercase(Locale.FRANCE), style = engraved(BrutType.Legend), color = BrutColors.Amber)
+        // La langue suit la configuration : un changement de langue redessine la date.
+        val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+        val date = Instant.ofEpochMilli(take.dateMillis).atZone(ZoneId.systemDefault()).format(dateFormat(locale))
+        Text(date.uppercase(locale), style = engraved(BrutType.Legend), color = BrutColors.Amber)
         Text(take.baseName, style = engraved(BrutType.BodyStrong), color = BrutColors.Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(formatLine(take), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1)
     }

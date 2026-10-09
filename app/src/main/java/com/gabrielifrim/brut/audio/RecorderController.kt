@@ -422,14 +422,14 @@ class RecorderController(private val context: Context) {
             }
         } ?: "?"
         val gains = if (format.channels == 2) {
-            "gain G ${signedDb(s.gainDb[0])} dB / D ${signedDb(s.gainDb[1])} dB"
+            context.getString(R.string.bext_gains_stereo, signedDb(s.gainDb[0]), signedDb(s.gainDb[1]))
         } else {
-            "gain ${signedDb(s.gainDb[0])} dB"
+            context.getString(R.string.bext_gain_mono, signedDb(s.gainDb[0]))
         }
         val source = s.capture?.source?.name ?: "?"
-        val safety = safetyDb?.let { " ; piste de sécurité ${signedDb(it)} dB" }.orEmpty()
+        val safety = safetyDb?.let { context.getString(R.string.bext_safety, signedDb(it)) }.orEmpty()
         return Bext(
-            description = "Entrée : $device ; $gains$safety ; capture $source ; enregistré sans traitement par Brut",
+            description = context.getString(R.string.bext_description, device, gains, safety, source),
             originator = "Brut $appVersion",
             originatorReference = fileName.removeSuffix(".wav"),
             date = start,
@@ -438,7 +438,7 @@ class RecorderController(private val context: Context) {
         )
     }
 
-    private fun signedDb(db: Float) = String.format(java.util.Locale.FRANCE, "%+.1f", db)
+    private fun signedDb(db: Float) = String.format(java.util.Locale.getDefault(), "%+.1f", db)
 
     fun stopRecording(message: UserMessage? = null) {
         val e = engine ?: return

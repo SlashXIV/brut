@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traduction anglaise. Le français (values/) reste la langue de référence. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Notification -->
+    <string name="notification_channel_recording">Recording in progress</string>
+    <string name="notification_recording_title">Brut is recording</string>
+    <string name="action_stop">Stop</string>
+
+    <!-- Permission -->
+    <string name="permission_title">Brut needs the microphone</string>
+    <string name="permission_body">To show levels and record, Brut needs access to the audio input. No data leaves your phone: no account, no network.</string>
+    <string name="permission_grant">Allow microphone</string>
+    <string name="permission_settings">Open settings</string>
+
+    <!-- Entrée -->
+    <string name="source_title">Input</string>
+    <string name="tag_raw">Raw</string>
+    <string name="tag_no_agc">No auto gain</string>
+    <string name="tag_standard">Standard</string>
+    <string name="tag_no_fx">No effects</string>
+    <string name="tag_fx">Effects active</string>
+    <string name="source_none">No input detected</string>
+    <string name="source_pick_title">Choose the input</string>
+    <string name="source_pick_hint">Brut never forces the built-in mic: pick the input that should record.</string>
+    <string name="source_active">in use</string>
+    <string name="source_section_inputs">Available inputs</string>
+    <string name="capture_section">Capture mode</string>
+    <string name="capture_mode_auto">Automatic</string>
+    <string name="capture_mode_auto_hint">The rawest mode the device accepts. Recommended.</string>
+    <string name="capture_mode_raw">Raw</string>
+    <string name="capture_mode_raw_hint">No processing from Android or the manufacturer.</string>
+    <string name="capture_mode_raw_missing">Not offered by this device.</string>
+    <string name="capture_mode_voice">No auto gain</string>
+    <string name="capture_mode_voice_hint">No automatic gain control. The usual fallback when raw mode is missing.</string>
+    <string name="capture_mode_standard">Standard</string>
+    <string name="capture_mode_standard_hint">The mic as other apps see it: the manufacturer may apply processing.</string>
+    <string name="kind_usb">USB-C</string>
+    <string name="kind_wired">Wired</string>
+    <string name="kind_builtin">Built-in mic</string>
+    <string name="kind_bluetooth">Bluetooth</string>
+    <string name="kind_other">Other</string>
+    <string name="device_channels_any">channels not specified</string>
+    <string name="device_channels">%1$s channels max.</string>
+    <string name="device_rates_any">sample rates not specified</string>
+    <string name="device_bluetooth_warning">Bluetooth tops out at 16 kHz: avoid it for a quality recording.</string>
+
+    <!-- Capture réelle -->
+    <string name="capture_waiting">Opening the input…</string>
+
+    <!-- Alertes -->
+    <string name="warning_rerouted">Android is capturing from “%1$s” instead of the chosen input.</string>
+    <string name="warning_silenced">Mic muted by Android (call or another app).</string>
+    <string name="warning_mic_source">This device offers no raw capture: manufacturer processing may apply.</string>
+    <string name="warning_effects">Effects imposed by the device: %1$s</string>
+    <string name="warning_mono_input">Mono input: both channels will be identical.</string>
+    <string name="warning_resampled">The hardware runs at %1$s: Android is resampling.</string>
+
+    <!-- Format -->
+    <string name="format_subtitle">Uncompressed WAV, with no automatic processing.</string>
+    <string name="format_rate_unit">kHz</string>
+    <string name="format_depth_unit">BITS</string>
+    <string name="format_channels">CHANNELS</string>
+    <string name="format_hint_16">Plays everywhere. Bit-exact when gain is at 0 dB.</string>
+    <string name="format_hint_24">The studio standard: 144 dB of dynamic range.</string>
+    <string name="format_hint_32f">Peaks above 0 dBFS are kept in the file: recoverable in the edit.</string>
+    <string name="format_data_rate">%1$s per minute</string>
+    <string name="format_mono">Mono</string>
+    <string name="format_short_mono">MONO</string>
+    <string name="format_short_stereo">STEREO</string>
+    <string name="format_not_native">Greyed positions: not native to this input, Android converts the signal.</string>
+    <string name="format_locked">Locked while recording</string>
+
+    <!-- Console -->
+    <string name="channel_left">L</string>
+    <string name="channel_right">R</string>
+    <string name="channel_mono">M</string>
+    <string name="channel_left_long">Left channel</string>
+    <string name="channel_left_name">Left</string>
+    <string name="channel_right_name">Right</string>
+    <string name="channel_right_long">Right channel</string>
+    <string name="gain">Gain</string>
+    <string name="gain_link">Link L/R</string>
+    <string name="gain_decrease">Lower by 0.5 dB</string>
+    <string name="gain_increase">Raise by 0.5 dB</string>
+    <string name="clip">CLIP</string>
+    <string name="clip_input">INPUT OVL</string>
+    <string name="clip_reset">Tap to clear the clip</string>
+    <string name="meter_peak">PEAK</string>
+    <string name="meter_mode_peak">PEAK</string>
+    <string name="meter_mode_vu">VU</string>
+    <string name="meter_rms">RMS</string>
+    <string name="meter_max">MAX</string>
+    <string name="db_value">%1$s dB</string>
+    <string name="dbfs_floor">−∞</string>
+    <string name="remaining">≈ %1$s left · %2$s</string>
+    <string name="remaining_low">Storage almost full: ≈ %1$s left</string>
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="recording_to">→ %1$s</string>
+
+    <!-- Messages -->
+    <string name="msg_saved">Saved: %1$s</string>
+    <string name="msg_device_connected">Input detected: %1$s</string>
+    <string name="msg_device_lost">Input unplugged: %1$s</string>
+    <string name="msg_stopped_device_lost">“%1$s” unplugged: take stopped and saved (%2$s). Brut never silently switches to the built-in mic.</string>
+    <string name="msg_size_limit">WAV 4 GB limit reached: take saved.</string>
+    <string name="msg_write_failed">Cannot write (storage full?). The part already recorded is kept.</string>
+    <string name="msg_capture_failed">Cannot open this input with this format. Try another sample rate or another input.</string>
+
+    <!-- Robustesse -->
+    <string name="marker_silenced">Mic muted by the system</string>
+    <string name="marker_unsilenced">Mic restored</string>
+    <string name="marker_manual">Marker %1$d</string>
+    <string name="marker_resumed">Resumed after a capture interruption</string>
+    <string name="msg_recovered">Interrupted take recovered: %1$s (%2$s)</string>
+    <string name="msg_capture_resumed">Capture was interrupted: resumed automatically in the same file, a marker shows the gap.</string>
+    <string name="msg_stopped_battery">Battery almost empty: take stopped and saved.</string>
+    <string name="msg_stopped_space">Storage full: take stopped and saved.</string>
+    <string name="warning_low_battery">Low battery: %1$d %%. Plug in the phone so you don’t lose the end.</string>
+    <string name="warning_low_space">Less than %1$s of space left.</string>
+    <string name="storage_music">Music</string>
+    <string name="storage_internal">Internal storage</string>
+    <string name="storage_sd">SD card</string>
+
+    <!-- Outils de prise -->
+    <string name="take_settings_title">Take settings</string>
+    <string name="tools_title">Take tools</string>
+    <string name="tools_off">OFF</string>
+    <string name="tools_preroll">PRE-REC</string>
+    <string name="tools_safety">SAFETY</string>
+    <string name="tools_trigger">TRIGGER</string>
+    <string name="tools_monitor">Headphone monitoring</string>
+    <string name="tools_monitor_hint">The recorded signal is sent to the headphones, with a little latency.</string>
+    <string name="tools_preroll_hint">PRE-REC: the seconds before you press REC are kept at the start of the file.</string>
+    <string name="tools_safety_hint">SAFETY: a second “_securite” file is recorded in parallel, lower, in case the main take clips.</string>
+    <string name="tools_trigger_hint">TRIGGER: REC arms the take, which starts by itself as soon as the sound exceeds the threshold.</string>
+    <string name="tools_short_preroll">Pre-rec %1$d s</string>
+    <string name="tools_short_safety">Safety %1$s dB</string>
+    <string name="tools_short_trigger">Trigger %1$s dBFS</string>
+    <string name="tools_short_monitor">Headphones</string>
+    <string name="warning_armed">Take armed: it starts as soon as the sound exceeds %1$s dBFS.</string>
+    <string name="warning_monitor_no_headphones">Plug in headphones to monitor: through the speaker, the sound would feed back into the mic.</string>
+    <string name="marker_button">Drop a marker</string>
+    <string name="msg_marker">Marker dropped: no. %1$d</string>
+    <string name="disarm">Disarm</string>
+    <string name="action_marker">Marker</string>
+    <string name="notification_armed_title">Brut is armed</string>
+    <string name="notification_armed_text">Waiting for signal…</string>
+    <string name="meter_mode_lufs">LUFS</string>
+    <string name="meter_mode_spectrum">SPECTRUM</string>
+    <string name="lufs_momentary">Momentary</string>
+    <string name="lufs_short">Short term</string>
+    <string name="lufs_integrated">Integrated</string>
+    <string name="lufs_true_peak">True peak max</string>
+    <string name="lufs_reset">Reset</string>
+
+    <!-- Bibliothèque -->
+    <string name="library_open">Takes</string>
+    <string name="library_title">Takes</string>
+    <string name="library_back">Back to the console</string>
+    <plurals name="library_count">
+        <item quantity="one">%1$d take</item>
+        <item quantity="other">%1$d takes</item>
+    </plurals>
+    <string name="library_search">Search…</string>
+    <string name="library_sort">Sort</string>
+    <string name="library_sort_date">Date</string>
+    <string name="library_sort_name">Name</string>
+    <string name="library_sort_duration">Length</string>
+    <string name="library_read_all">Also show takes from a previous install →</string>
+    <string name="library_loading">Reading takes…</string>
+    <string name="library_empty">No takes yet. They will show up here after your first recording.</string>
+    <string name="library_no_match">No take matches the search.</string>
+    <string name="library_unreadable">Unreadable file</string>
+    <string name="library_loop">Loop</string>
+    <string name="library_play">Play</string>
+    <string name="library_pause">Pause</string>
+    <string name="library_waveform">Waveform: tap to seek</string>
+    <string name="library_recording_busy">Playback unavailable while recording.</string>
+    <string name="library_rename">Rename</string>
+    <string name="library_share">Share</string>
+    <string name="library_delete">Delete</string>
+    <string name="library_cancel">Cancel</string>
+    <string name="library_rename_title">Rename the take</string>
+    <string name="library_rename_hint">The .wav extension is added automatically.</string>
+    <string name="library_trashed">“%1$s” moved to trash</string>
+    <string name="library_undo">Undo</string>
+    <string name="library_renamed">Renamed: %1$s</string>
+    <string name="folder_title">Takes folder</string>
+    <string name="folder_change">Change</string>
+    <string name="folder_default">Default</string>
+    <string name="library_delete_title">Delete permanently?</string>
+    <string name="library_delete_body">“%1$s” is in a chosen folder with no trash: deleting cannot be undone.</string>
+    <string name="library_failed">This take cannot be changed.</string>
+    <string name="library_edit">Edit</string>
+    <string name="trim_in">IN</string>
+    <string name="trim_out">OUT</string>
+    <string name="trim_length">Length</string>
+    <string name="trim_in_here">IN here</string>
+    <string name="trim_out_here">OUT here</string>
+    <string name="trim_all">All</string>
+    <string name="trim_waveform">Selection: drag the IN and OUT handles, tap to seek</string>
+    <string name="trim_hint">Only the selection plays. “IN here” and “OUT here” set a handle at the playhead; near a marker, the handle snaps to it.</string>
+    <string name="export_title">Export</string>
+    <string name="export_depth">BIT DEPTH</string>
+    <string name="export_channels">CHANNELS</string>
+    <string name="export_original">ORIG.</string>
+    <string name="export_both">L+R</string>
+    <string name="export_left">L</string>
+    <string name="export_right">R</string>
+    <string name="export_hint_exact">Original bit depth: the selection is copied byte for byte.</string>
+    <string name="export_hint_convert">Converted to %1$s, without dither.</string>
+    <string name="export_hint_clip">The take is floating point: its peaks above 0 dBFS will be clipped.</string>
+    <string name="export_hint_channel">Only the %1$s channel, its samples copied as they are.</string>
+    <string name="export_hint_original">The original is never changed; the sample rate stays that of the take.</string>
+    <string name="export_selection">Export the selection</string>
+    <string name="export_split">Split at markers · %1$d</string>
+    <string name="export_close">Close</string>
+    <string name="export_running">Exporting… %1$d %%</string>
+    <string name="export_cancel">Cancel</string>
+    <string name="export_busy">Export unavailable while recording.</string>
+    <string name="export_depth_int" tools:ignore="PluralsCandidate">%1$d-bit</string>
+    <string name="export_depth_float">32-bit float</string>
+    <string name="export_note">Extract from “%1$s”, %2$s → %3$s.</string>
+    <string name="export_note_convert">Converted to %1$s without dither.</string>
+    <string name="export_note_channel">Only the %1$s channel.</string>
+    <string name="export_suffix_extract">extract</string>
+    <string name="export_suffix_part">part</string>
+    <string name="library_exported">Exported: %1$s</string>
+    <plurals name="library_exported_parts">
+        <item quantity="one">%d part exported</item>
+        <item quantity="other">%d parts exported</item>
+    </plurals>
+    <plurals name="library_exported_clipped">
+        <item quantity="one">%d sample clipped by the conversion</item>
+        <item quantity="other">%d samples clipped by the conversion</item>
+    </plurals>
+    <string name="presets_title">Presets</string>
+    <string name="presets_none">Your own settings. A preset changes the format and the tools, never the gain or the input.</string>
+    <string name="preset_interview">Interview</string>
+    <string name="preset_concert">Concert</string>
+    <string name="preset_ambiance">Ambience</string>
+    <string name="preset_voice_over">Voice-over</string>
+    <string name="preset_interview_hint">48 kHz · 24-bit · mono, 2 s pre-record, safety track at −12 dB.</string>
+    <string name="preset_concert_hint">48 kHz · 24-bit · stereo, 5 s pre-record, safety track at −12 dB.</string>
+    <string name="preset_ambiance_hint">96 kHz · 24-bit · stereo, no tools: the sound as it is, in detail.</string>
+    <string name="preset_voice_over_hint">48 kHz · 24-bit · mono, 2 s pre-record to keep the first breath.</string>
+    <string name="quick_started">Brut is recording</string>
+    <string name="quick_armed">Brut is armed: the take will start above the threshold</string>
+    <string name="quick_failed">Could not start the take</string>
+    <string name="tile_record">Record</string>
+    <string name="tile_stop">Stop</string>
+    <string name="tile_armed">Disarm</string>
+    <string name="tile_armed_subtitle">Armed</string>
+    <string name="widget_brand">BRUT</string>
+    <string name="widget_ready">READY</string>
+    <string name="widget_recording">● RECORDING</string>
+    <string name="widget_armed">ARMED</string>
+    <string name="widget_clip">CLIP</string>
+    <string name="widget_description">REC, timer and level on the home screen</string>
+    <string name="shortcut_record_short">Record</string>
+    <string name="shortcut_record_long">Start a take</string>
+    <string name="shortcut_library_short">Takes</string>
+    <string name="shortcut_library_long">Open the takes</string>
+
+    <!-- Accessibilité (TalkBack) -->
+    <string name="a11y_channel_left">left channel</string>
+    <string name="a11y_channel_right">right channel</string>
+    <string name="a11y_channel_mono">mono</string>
+    <string name="a11y_db">%1$s %2$s</string>
+    <string name="a11y_silence">silence</string>
+    <string name="a11y_no_reading">no reading yet</string>
+    <string name="a11y_levels">Levels, %1$s: peak %2$s, RMS %3$s, maximum %4$s</string>
+    <string name="a11y_peak_meter">Peak meter, %1$s</string>
+    <string name="a11y_vu_meter">VU meter, %1$s</string>
+    <string name="a11y_clip">Clip light, %1$s</string>
+    <string name="a11y_clip_off">off</string>
+    <string name="a11y_clip_file">on: the file is clipping</string>
+    <string name="a11y_clip_input">on: the input overloads before the gain, lower the level at the source</string>
+    <string name="a11y_meter_mode">Meter display</string>
+    <string name="a11y_switch_to">switch to %1$s</string>
+    <string name="a11y_spectrum">Spectrum analyser</string>
+    <string name="a11y_spectrum_peak">strongest band around %1$s, %2$s</string>
+    <string name="a11y_hz" tools:ignore="PluralsCandidate">%1$d hertz</string>
+    <string name="a11y_khz">%1$s kilohertz</string>
+    <string name="a11y_clock">Take length: %1$s</string>
+    <string name="a11y_clock_idle">No take in progress</string>
+    <string name="a11y_open_library">Open the takes</string>
+    <plurals name="a11y_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="a11y_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="a11y_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+
+    <!-- Description BWF écrite dans chaque prise -->
+    <string name="bext_description">Input: %1$s; %2$s%3$s; capture %4$s; recorded without processing by Brut</string>
+    <string name="bext_gains_stereo">gain L %1$s dB / R %2$s dB</string>
+    <string name="bext_gain_mono">gain %1$s dB</string>
+    <string name="bext_safety">; safety track %1$s dB</string>
+</resources>

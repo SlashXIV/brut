@@ -4,9 +4,16 @@ import com.gabrielifrim.brut.audio.LevelMeter
 import java.util.Locale
 import kotlin.math.abs
 
-/** Formats d'affichage à la française : virgule décimale, vrai signe moins, espaces fines. */
+/**
+ * Formats d'affichage : séparateur décimal de la langue du téléphone (virgule en français),
+ * et toujours le vrai signe moins.
+ */
 
-private val FR = Locale.FRANCE
+private val FR: Locale get() = Locale.getDefault()
+
+/** Unités de taille : « Go, Mo, Ko » en français, « GB, MB, KB » ailleurs. */
+private fun sizeUnits(): Triple<String, String, String> =
+    if (Locale.getDefault().language == "fr") Triple("Go", "Mo", "Ko") else Triple("GB", "MB", "KB")
 
 fun formatDuration(seconds: Double, withHundredths: Boolean = true): String {
     val total = seconds.toLong()
@@ -34,10 +41,13 @@ fun formatDb(db: Float, signed: Boolean = false): String? {
 fun formatRate(hz: Int): String =
     if (hz % 1000 == 0) "${hz / 1000} kHz" else String.format(FR, "%.1f kHz", hz / 1000.0)
 
-fun formatBytes(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> String.format(FR, "%.1f Go", bytes / (1L shl 30).toDouble())
-    bytes >= 1L shl 20 -> String.format(FR, "%.0f Mo", bytes / (1L shl 20).toDouble())
-    else -> String.format(FR, "%.0f Ko", bytes / 1024.0)
+fun formatBytes(bytes: Long): String {
+    val (gb, mb, kb) = sizeUnits()
+    return when {
+        bytes >= 1L shl 30 -> String.format(FR, "%.1f $gb", bytes / (1L shl 30).toDouble())
+        bytes >= 1L shl 20 -> String.format(FR, "%.0f $mb", bytes / (1L shl 20).toDouble())
+        else -> String.format(FR, "%.0f $kb", bytes / 1024.0)
+    }
 }
 
 /** Durée lue par TalkBack : « 1 heure 2 minutes 5 secondes » plutôt que « 01:02:05 ». */

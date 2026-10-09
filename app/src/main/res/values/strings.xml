@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">Brut</string>
+    <string name="app_name" translatable="false">Brut</string>
 
     <!-- Notification -->
     <string name="notification_channel_recording">Enregistrement en cours</string>
@@ -301,4 +301,9 @@
         <item quantity="one">%d seconde</item>
         <item quantity="other">%d secondes</item>
     </plurals>
+    <!-- Description BWF écrite dans chaque prise (transcrite en ASCII dans le bext). -->
+    <string name="bext_description">Entrée : %1$s ; %2$s%3$s ; capture %4$s ; enregistré sans traitement par Brut</string>
+    <string name="bext_gains_stereo">gain G %1$s dB / D %2$s dB</string>
+    <string name="bext_gain_mono">gain %1$s dB</string>
+    <string name="bext_safety"> ; piste de sécurité %1$s dB</string>
 </resources>
