@@ -37,7 +37,7 @@ class SettingsStore(private val context: Context) {
         val p = context.dataStore.data.first()
         val rate = p[RATE]?.takeIf { it in AudioFormatSpec.SUPPORTED_SAMPLE_RATES } ?: 48_000
         val depth = p[DEPTH]?.let { name -> BitDepth.entries.firstOrNull { it.name == name } } ?: BitDepth.PCM_24
-        val channels = p[CHANNELS]?.takeIf { it == 1 || it == 2 } ?: 2
+        val channels = p[CHANNELS]?.takeIf { it in 1..AudioFormatSpec.MAX_CHANNELS } ?: 2
         return SavedSettings(
             format = AudioFormatSpec(rate, depth, channels),
             gainDb = listOf(p[GAIN_L] ?: 0f, p[GAIN_R] ?: 0f),
@@ -52,7 +52,7 @@ class SettingsStore(private val context: Context) {
                 triggerDb = p[TRIGGER_DB]?.takeIf { it in TakeOptions.TRIGGER_CHOICES } ?: -30f,
                 monitor = p[MONITOR] ?: false,
                 timecodeRate = p[TC_RATE]?.let { name -> TimecodeRate.entries.firstOrNull { it.name == name } } ?: TimecodeRate.DEFAULT,
-                ltcChannel = p[LTC_CHANNEL]?.takeIf { it == 0 || it == 1 },
+                ltcChannel = p[LTC_CHANNEL]?.takeIf { it in 0 until channels },
             ),
             meterMode = p[METER]?.let { name -> MeterMode.entries.firstOrNull { it.name == name } } ?: MeterMode.PEAK,
         )

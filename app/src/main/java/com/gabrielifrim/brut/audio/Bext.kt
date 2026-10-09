@@ -83,7 +83,11 @@ data class Bext(
         /** Ligne d'historique de codage normalisée (EBU R98) : « A=PCM,F=48000,W=24,M=stereo,T=… ». */
         fun codingHistoryFor(format: AudioFormatSpec, tool: String): String {
             val algorithm = if (format.bitDepth.isFloat) "PCM-FLOAT" else "PCM"
-            val mode = if (format.channels == 1) "mono" else "stereo"
+            val mode = when (format.channels) {
+                1 -> "mono"
+                2 -> "stereo"
+                else -> "multitrack"
+            }
             return "A=$algorithm,F=${format.sampleRate},W=${format.bitDepth.bits},M=$mode,T=$tool\r\n"
         }
     }

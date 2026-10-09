@@ -18,6 +18,8 @@ data class Marker(val frame: Long, val label: String)
  * - 16 bit : PCM classique, lu partout.
  * - 24 bit : WAVE_FORMAT_EXTENSIBLE, la forme correcte au-delà de 16 bit.
  * - 32 bit : flottant IEEE (format 3) + chunk `fact`, obligatoire hors PCM.
+ * - Plus de 2 voies : toujours EXTENSIBLE (exigé par la norme), sans affectation de
+ *   haut-parleurs (masque 0) : ce sont des pistes indépendantes, pas du surround.
  *
  * Au-delà de 4 Go, le fichier devient un **RF64** (EBU Tech 3306) : un chunk `JUNK`
  * réservé en tête est alors transformé en `ds64`, qui porte les tailles sur 64 bit.
@@ -38,7 +40,8 @@ class WavWriter(
     /** Position et taille du corps de chaque chunk de métadonnées, pour les réécrire en place. */
     private val chunkBodies = HashMap<String, Pair<Long, Int>>()
     private val headerSize: Int
-    private val factOffset: Int?
+    /** Position du compteur de trames du chunk `fact` (flottant seulement). */
+    private var factOffset: Int? = null
     private val markers = mutableListOf<Marker>()
 
     var dataBytes: Long = 0
@@ -49,8 +52,6 @@ class WavWriter(
     init {
         val header = buildHeader()
         headerSize = header.limit()
-        // RIFF (12) + JUNK (8 + 28) + en-tête fmt (8) + corps fmt (18 en flottant) + en-tête fact (8)
-        factOffset = if (format.bitDepth.isFloat) 12 + 36 + 8 + 18 + 8 else null
         channel.truncate(0)
         writeFully(header, 0)
     }
@@ -142,25 +143,32 @@ class WavWriter(
         // Place réservée au ds64 du RF64 (taille identique) : ignorée tant qu'elle s'appelle JUNK.
         b.put(ascii("JUNK")); b.putInt(DS64_SIZE); b.put(ByteArray(DS64_SIZE))
         b.put(ascii("fmt "))
-        when (format.bitDepth) {
-            BitDepth.PCM_16 -> {
-                b.putInt(16)
-                fmtCommon(b, FORMAT_PCM, blockAlign, bits)
-            }
-            BitDepth.PCM_24 -> {
-                b.putInt(40)
-                fmtCommon(b, FORMAT_EXTENSIBLE, blockAlign, bits)
-                b.putShort(22)                                  // cbSize
-                b.putShort(bits.toShort())                      // bits valides
-                b.putInt(if (format.channels == 1) SPEAKER_MONO else SPEAKER_STEREO)
-                b.put(SUBFORMAT_PCM_GUID)
-            }
-            BitDepth.FLOAT_32 -> {
-                b.putInt(18)
-                fmtCommon(b, FORMAT_IEEE_FLOAT, blockAlign, bits)
-                b.putShort(0)                                   // cbSize
-                b.put(ascii("fact")); b.putInt(4); b.putInt(0)
-            }
+        val extensible = format.bitDepth == BitDepth.PCM_24 || format.channels > 2
+        if (extensible) {
+            b.putInt(40)
+            fmtCommon(b, FORMAT_EXTENSIBLE, blockAlign, bits)
+            b.putShort(22)                                      // cbSize
+            b.putShort(bits.toShort())                          // bits valides
+            b.putInt(
+                when (format.channels) {
+                    1 -> SPEAKER_MONO
+                    2 -> SPEAKER_STEREO
+                    else -> 0 // pistes indépendantes
+                },
+            )
+            b.put(if (format.bitDepth.isFloat) SUBFORMAT_FLOAT_GUID else SUBFORMAT_PCM_GUID)
+        } else if (format.bitDepth.isFloat) {
+            b.putInt(18)
+            fmtCommon(b, FORMAT_IEEE_FLOAT, blockAlign, bits)
+            b.putShort(0)                                       // cbSize
+        } else {
+            b.putInt(16)
+            fmtCommon(b, FORMAT_PCM, blockAlign, bits)
+        }
+        if (format.bitDepth.isFloat) {
+            b.put(ascii("fact")); b.putInt(4)
+            factOffset = b.position()
+            b.putInt(0)
         }
         for ((id, body) in extraChunks) {
             require(id.length == 4) { "Identifiant de chunk invalide : $id" }
@@ -193,6 +201,12 @@ class WavWriter(
 
         /** Limite de sûreté (RF64) : bien au-delà de toute carte mémoire. */
         const val MAX_DATA_BYTES = 1L shl 50
+
+        // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : 00000003-0000-0010-8000-00aa00389b71
+        private val SUBFORMAT_FLOAT_GUID = byteArrayOf(
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+            0x80.toByte(), 0x00, 0x00, 0xAA.toByte(), 0x00, 0x38, 0x9B.toByte(), 0x71,
+        )
 
         // KSDATAFORMAT_SUBTYPE_PCM : 00000001-0000-0010-8000-00aa00389b71
         private val SUBFORMAT_PCM_GUID = byteArrayOf(
