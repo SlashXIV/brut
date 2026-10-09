@@ -13,6 +13,7 @@ import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.TakeOptions
+import com.gabrielifrim.brut.audio.TimecodeRate
 import kotlinx.coroutines.flow.first
 
 /** Réglages retrouvés d'une session à l'autre. */
@@ -50,6 +51,8 @@ class SettingsStore(private val context: Context) {
                 trigger = p[TRIGGER] ?: false,
                 triggerDb = p[TRIGGER_DB]?.takeIf { it in TakeOptions.TRIGGER_CHOICES } ?: -30f,
                 monitor = p[MONITOR] ?: false,
+                timecodeRate = p[TC_RATE]?.let { name -> TimecodeRate.entries.firstOrNull { it.name == name } } ?: TimecodeRate.DEFAULT,
+                ltcChannel = p[LTC_CHANNEL]?.takeIf { it == 0 || it == 1 },
             ),
             meterMode = p[METER]?.let { name -> MeterMode.entries.firstOrNull { it.name == name } } ?: MeterMode.PEAK,
         )
@@ -70,6 +73,8 @@ class SettingsStore(private val context: Context) {
             p[TRIGGER] = settings.options.trigger
             p[TRIGGER_DB] = settings.options.triggerDb
             p[MONITOR] = settings.options.monitor
+            p[TC_RATE] = settings.options.timecodeRate.name
+            p[LTC_CHANNEL] = settings.options.ltcChannel ?: -1
             settings.captureMode?.let { p[CAPTURE] = it.name } ?: p.remove(CAPTURE)
             settings.deviceKey?.let { p[DEVICE] = it } ?: p.remove(DEVICE)
         }
@@ -91,5 +96,7 @@ class SettingsStore(private val context: Context) {
         val TRIGGER = booleanPreferencesKey("declenchement")
         val TRIGGER_DB = floatPreferencesKey("declenchement_db")
         val MONITOR = booleanPreferencesKey("ecoute_casque")
+        val TC_RATE = stringPreferencesKey("tc_cadence")
+        val LTC_CHANNEL = intPreferencesKey("tc_voie_ltc")
     }
 }

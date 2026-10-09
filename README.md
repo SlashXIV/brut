@@ -89,6 +89,14 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Conversion au choix vers 16, 24 ou 32 bit flottant (sans tramage, écrêtages signalés) et
   extraction d’une seule voie ; la fréquence d’échantillonnage reste celle de la prise
 - L’horodatage BWF de l’extrait est décalé d’autant : la synchronisation avec une caméra reste juste
+- **Changement de fréquence** à l’export (44,1, 48 ou 96 kHz), au choix et signalé comme un
+  traitement : filtre sinc, bande passante jusqu’à 20 kHz, plus de 130 dB de réjection
+
+**Timecode**
+- Cadence au choix (23,976 à 30 i/s, drop-frame compris), écrite dans l’iXML avec l’heure de départ
+- **LTC** : branche un générateur (Tentacle, caméra…) sur une voie ; Brut affiche le timecode reçu
+  et cale le début du fichier dessus à l’arrêt, à l’échantillon près
+- Calage après coup d’une prise existante sur son LTC, sans toucher au son
 
 Les prises sont rangées par défaut dans `Musique/Brut`, visibles depuis n’importe quel lecteur ou
 depuis un ordinateur branché en USB, ou dans le dossier de ton choix.

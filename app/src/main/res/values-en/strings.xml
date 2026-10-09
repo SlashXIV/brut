@@ -308,4 +308,25 @@
     <string name="bext_gains_stereo">gain L %1$s dB / R %2$s dB</string>
     <string name="bext_gain_mono">gain %1$s dB</string>
     <string name="bext_safety">; safety track %1$s dB</string>
+    <!-- Timecode -->
+    <string name="tc_title">Timecode</string>
+    <string name="tc_rate">RATE</string>
+    <string name="tc_source">SOURCE</string>
+    <string name="tc_clock">CLOCK</string>
+    <string name="tc_ltc_left">LTC L</string>
+    <string name="tc_ltc_right">LTC R</string>
+    <string name="tc_hint">CLOCK: the phone’s time, at the chosen rate. LTC: plug the timecode output (Tentacle, camera…) into one channel; Brut reads the time and rate from the signal and stamps the start of the file with it on stop. The LTC stays recorded on that channel.</string>
+    <string name="ltc_label">LTC %1$s</string>
+    <string name="ltc_none">— no signal</string>
+    <string name="a11y_ltc">Timecode received: %1$s</string>
+    <string name="a11y_ltc_none">No timecode received</string>
+    <string name="msg_saved_ltc">Saved: %1$s · stamped from LTC %2$s</string>
+    <string name="msg_saved_no_ltc">Saved: %1$s · no LTC found, phone time kept</string>
+    <string name="library_tc">TC %1$s · %2$s fps</string>
+    <string name="library_ltc_stamp">Stamp from LTC</string>
+    <string name="library_ltc_body">Brut reads the LTC recorded on one channel and rewrites the take’s start time (bext and iXML metadata). The audio is not touched.</string>
+    <string name="library_ltc_left">Left channel</string>
+    <string name="library_ltc_right">Right channel</string>
+    <string name="library_ltc_done">Stamped from LTC: %1$s</string>
+    <string name="library_ltc_missing">No readable LTC on this channel.</string>
 </resources>

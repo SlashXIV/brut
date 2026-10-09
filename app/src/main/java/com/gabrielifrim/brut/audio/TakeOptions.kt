@@ -12,6 +12,13 @@ data class TakeOptions(
     val triggerDb: Float = -30f,
     /** Écoute de contrôle au casque. */
     val monitor: Boolean = false,
+    /** Cadence du timecode écrit dans le fichier quand l'heure vient de l'horloge du téléphone. */
+    val timecodeRate: TimecodeRate = TimecodeRate.DEFAULT,
+    /**
+     * Voie qui reçoit un LTC (0 = gauche, 1 = droite) ; null = heure du téléphone. Le LTC
+     * reste enregistré comme du son sur cette voie : c'est l'usage des enregistreurs de terrain.
+     */
+    val ltcChannel: Int? = null,
 ) {
     /** Le déclenchement sur seuil garde toujours au moins une seconde : l'attaque n'est pas perdue. */
     val effectivePrerollSeconds: Int get() = if (trigger) maxOf(prerollSeconds, 1) else prerollSeconds

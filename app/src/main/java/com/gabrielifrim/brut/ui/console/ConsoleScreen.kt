@@ -357,6 +357,7 @@ private fun Warnings(state: RecorderState) {
 
 @Composable
 private fun Transport(state: RecorderState, actions: ConsoleActions) {
+    LtcReadout(state)
     ToolsSummary(state)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -378,6 +379,27 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
             onClick = actions::toggleRecording,
             armed = state.isArmed,
         )
+    }
+}
+
+/** Timecode reçu sur la voie LTC : à vérifier avant REC, comme sur un enregistreur de plateau. */
+@Composable
+private fun LtcReadout(state: RecorderState) {
+    val channel = state.options.ltcChannel ?: return
+    val side = stringResource(if (channel == 0) R.string.channel_left else R.string.channel_right)
+    val tc = state.ltcReadout
+    val spoken = if (tc != null) stringResource(R.string.a11y_ltc, tc) else stringResource(R.string.a11y_ltc_none)
+    Row(
+        Modifier
+            .padding(bottom = 4.dp)
+            .clearAndSetSemantics { contentDescription = spoken },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Lamp(if (tc != null) BrutColors.Green else BrutColors.Red)
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.ltc_label, side), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+        Spacer(Modifier.width(8.dp))
+        Readout(tc ?: stringResource(R.string.ltc_none), color = if (tc != null) BrutColors.Amber else BrutColors.Red)
     }
 }
 
@@ -446,7 +468,11 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
     AnimatedVisibility(message != null, modifier, enter = fadeIn(), exit = fadeOut()) {
         val m = shown ?: return@AnimatedVisibility
         val text = when (m) {
-            is UserMessage.Saved -> stringResource(R.string.msg_saved, m.name)
+            is UserMessage.Saved -> when {
+                m.ltc != null -> stringResource(R.string.msg_saved_ltc, m.name, m.ltc)
+                m.ltcMissing -> stringResource(R.string.msg_saved_no_ltc, m.name)
+                else -> stringResource(R.string.msg_saved, m.name)
+            }
             is UserMessage.DeviceConnected -> stringResource(R.string.msg_device_connected, m.name)
             is UserMessage.DeviceLost -> stringResource(R.string.msg_device_lost, m.name)
             is UserMessage.RecordingStoppedDeviceLost -> stringResource(R.string.msg_stopped_device_lost, m.name, m.file)
@@ -461,7 +487,8 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
             UserMessage.MonitorNeedsHeadphones -> stringResource(R.string.warning_monitor_no_headphones)
         }
         val accent = when (m) {
-            is UserMessage.Saved, is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Green
+            is UserMessage.Saved -> if (m.ltcMissing) BrutColors.Amber else BrutColors.Green
+            is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Green
             UserMessage.CaptureResumed, is UserMessage.MarkerAdded, UserMessage.MonitorNeedsHeadphones -> BrutColors.Amber
             else -> BrutColors.Red
         }

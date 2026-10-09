@@ -37,8 +37,9 @@ enum class Preset(val format: AudioFormatSpec, val options: TakeOptions) {
     fun matches(format: AudioFormatSpec, options: TakeOptions): Boolean =
         format == this.format && options.normalized() == this.options.normalized()
 
-    /** Options appliquées en gardant l'écoute casque telle que l'utilisateur l'a laissée. */
-    fun optionsKeeping(current: TakeOptions): TakeOptions = options.copy(monitor = current.monitor)
+    /** Options appliquées en gardant l'écoute casque et le timecode tels que l'utilisateur les a laissés. */
+    fun optionsKeeping(current: TakeOptions): TakeOptions =
+        options.copy(monitor = current.monitor, timecodeRate = current.timecodeRate, ltcChannel = current.ltcChannel)
 
     companion object {
         fun matching(format: AudioFormatSpec, options: TakeOptions): Preset? =
@@ -49,6 +50,9 @@ enum class Preset(val format: AudioFormatSpec, val options: TakeOptions) {
             safetyDb = if (safetyTrack) safetyDb else TakeOptions().safetyDb,
             triggerDb = if (trigger) triggerDb else TakeOptions().triggerDb,
             monitor = false,
+            // Le timecode dépend du tournage, pas du type de prise.
+            timecodeRate = TimecodeRate.DEFAULT,
+            ltcChannel = null,
         )
     }
 }

@@ -18,6 +18,8 @@ data class WavInfo(
     val note: String? = null,
     /** Repères (`cue` + `labl`) posés pendant la prise. */
     val markers: List<Marker> = emptyList(),
+    /** Cadence du timecode déclarée dans l'iXML (bloc SPEED) ; null si absente. */
+    val timecodeRate: TimecodeRate? = null,
 ) {
     /** Ce qu'il faut afficher de la prise : la note iXML, sinon la description bext. */
     val description: String? get() = note ?: bext?.description?.takeIf { it.isNotBlank() }
@@ -49,6 +51,7 @@ object WavReader {
         var isFloat = false
         var bext: Bext? = null
         var note: String? = null
+        var tcRate: TimecodeRate? = null
         var ds64DataSize = -1L
         var dataOffset = -1L
         var dataBytes = 0L
@@ -81,7 +84,9 @@ object WavReader {
                     bext = Bext.decode(read(channel, body, chunkSize.toInt()))
                 }
                 Ixml.CHUNK_ID -> if (chunkSize in 1..262_144) {
-                    note = Ixml.decodeNote(read(channel, body, chunkSize.toInt()))
+                    val xml = read(channel, body, chunkSize.toInt())
+                    note = Ixml.decodeNote(xml)
+                    tcRate = Ixml.decodeRate(xml)
                 }
                 "data" -> {
                     if (channels == 0) throw IOException("Chunk fmt absent")
@@ -124,7 +129,7 @@ object WavReader {
             throw IOException("Résolution non prise en charge ($bits bit)")
         }
         val markers = cues.entries.sortedBy { it.value }.map { (id, frame) -> Marker(frame, labels[id].orEmpty()) }
-        val info = WavInfo(rate, channels, bits, isFloat, dataOffset, dataBytes, bext, note, markers)
+        val info = WavInfo(rate, channels, bits, isFloat, dataOffset, dataBytes, bext, note, markers, tcRate)
         return info.copy(dataBytes = dataBytes - dataBytes % info.blockAlign)
     }
 

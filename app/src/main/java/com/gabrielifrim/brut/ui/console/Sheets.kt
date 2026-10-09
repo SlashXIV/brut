@@ -33,6 +33,7 @@ import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.Preset
 import com.gabrielifrim.brut.audio.TakeOptions
+import com.gabrielifrim.brut.audio.TimecodeRate
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.gabrielifrim.brut.ui.formatDb
@@ -157,7 +158,7 @@ fun FormatSheet(
             style = BrutType.Readout, color = BrutColors.CreamDim,
         )
 
-        ToolsSection(options, headphones, locked, onOptions)
+        ToolsSection(options, headphones, locked, onOptions, stereo = format.channels == 2)
     }
 }
 
@@ -404,7 +405,7 @@ private fun deviceDetails(device: InputDevice): String {
  * défaut, l'enregistrement reste brut tant qu'on ne demande rien.
  */
 @Composable
-private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit) {
+private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit, stereo: Boolean = true) {
     val off = stringResource(R.string.tools_off)
     Spacer(Modifier.height(22.dp))
     Text(stringResource(R.string.tools_title), style = BrutType.Title)
@@ -467,4 +468,52 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
     ).forEach {
         Text(stringResource(it), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 4.dp))
     }
+    TimecodeSection(options, stereo, locked, onOptions)
+}
+
+/**
+ * Timecode : la cadence écrite dans le fichier, et la source de l'heure de départ
+ * (horloge du téléphone, ou LTC reçu sur une voie et lu pendant la prise).
+ */
+@Composable
+private fun TimecodeSection(options: TakeOptions, stereo: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit) {
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val decimal = java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator
+    Spacer(Modifier.height(22.dp))
+    Text(stringResource(R.string.tc_title), style = BrutType.Title)
+    Spacer(Modifier.height(12.dp))
+    RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            val ltc = options.ltcChannel != null
+            RotarySelector(
+                legend = stringResource(R.string.tc_rate),
+                options = TimecodeRate.entries,
+                selected = options.timecodeRate,
+                label = { it.label.replace(',', decimal) },
+                onSelect = { onOptions(options.copy(timecodeRate = it)) },
+                // Avec le LTC, la cadence est lue dans le signal.
+                enabled = !locked && !ltc,
+            )
+            val clock = stringResource(R.string.tc_clock)
+            val left = stringResource(R.string.tc_ltc_left)
+            val right = stringResource(R.string.tc_ltc_right)
+            RotarySelector(
+                legend = stringResource(R.string.tc_source),
+                options = listOf<Int?>(null, 0, 1),
+                selected = options.ltcChannel,
+                label = {
+                    when (it) {
+                        null -> clock
+                        0 -> left
+                        else -> right
+                    }
+                },
+                onSelect = { onOptions(options.copy(ltcChannel = it)) },
+                enabled = !locked,
+                isNative = { it != 1 || stereo },
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Text(stringResource(R.string.tc_hint), style = BrutType.Body, color = BrutColors.CreamDim)
 }

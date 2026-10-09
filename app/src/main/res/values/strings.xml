@@ -309,4 +309,25 @@
     <string name="bext_gains_stereo">gain G %1$s dB / D %2$s dB</string>
     <string name="bext_gain_mono">gain %1$s dB</string>
     <string name="bext_safety"> ; piste de sécurité %1$s dB</string>
+    <!-- Timecode -->
+    <string name="tc_title">Timecode</string>
+    <string name="tc_rate">CADENCE</string>
+    <string name="tc_source">SOURCE</string>
+    <string name="tc_clock">HORLOGE</string>
+    <string name="tc_ltc_left">LTC G</string>
+    <string name="tc_ltc_right">LTC D</string>
+    <string name="tc_hint">HORLOGE : l’heure du téléphone, à la cadence choisie. LTC : branche la sortie timecode (Tentacle, caméra…) sur une voie ; Brut lit l’heure et la cadence dans le signal et cale le début du fichier dessus à l’arrêt. Le LTC reste enregistré sur cette voie.</string>
+    <string name="ltc_label">LTC %1$s</string>
+    <string name="ltc_none">— pas de signal</string>
+    <string name="a11y_ltc">Timecode reçu : %1$s</string>
+    <string name="a11y_ltc_none">Aucun timecode reçu</string>
+    <string name="msg_saved_ltc">Enregistré : %1$s · calé sur le LTC %2$s</string>
+    <string name="msg_saved_no_ltc">Enregistré : %1$s · LTC introuvable, heure du téléphone conservée</string>
+    <string name="library_tc">TC %1$s · %2$s i/s</string>
+    <string name="library_ltc_stamp">Caler sur le LTC</string>
+    <string name="library_ltc_body">Brut lit le LTC enregistré sur une voie et réécrit l’heure de départ de la prise (métadonnées bext et iXML). Le son n’est pas touché.</string>
+    <string name="library_ltc_left">Voie gauche</string>
+    <string name="library_ltc_right">Voie droite</string>
+    <string name="library_ltc_done">Calée sur le LTC : %1$s</string>
+    <string name="library_ltc_missing">Aucun LTC lisible sur cette voie.</string>
 </resources>

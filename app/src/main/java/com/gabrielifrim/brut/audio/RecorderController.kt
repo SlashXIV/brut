@@ -34,7 +34,8 @@ enum class MeterMode { PEAK, VU, LUFS, SPECTRUM }
 
 /** Message destiné à l'utilisateur ; le texte est résolu par l'interface (strings.xml). */
 sealed interface UserMessage {
-    data class Saved(val name: String) : UserMessage
+    /** [ltc] : heure de départ calée sur le LTC ; [ltcMissing] : LTC demandé mais jamais reçu. */
+    data class Saved(val name: String, val ltc: String? = null, val ltcMissing: Boolean = false) : UserMessage
     data class DeviceConnected(val name: String) : UserMessage
     data class DeviceLost(val name: String) : UserMessage
     data class RecordingStoppedDeviceLost(val name: String, val file: String) : UserMessage
@@ -77,6 +78,8 @@ data class RecorderState(
     /** Un casque (filaire, USB ou Bluetooth) est branché : l'écoute de contrôle est possible. */
     val headphones: Boolean = false,
     val markerCount: Int = 0,
+    /** Timecode LTC reçu à l'instant (null : aucun signal lisible). */
+    val ltcReadout: String? = null,
     val message: UserMessage? = null,
 ) {
     val isArmed: Boolean get() = phase == Phase.ARMED
@@ -133,6 +136,10 @@ class RecorderController(private val context: Context) {
     private var currentFile: RecordingFile? = null
     private var safetyFile: RecordingFile? = null
     private var lastFreeCheck = 0L
+    /** bext et iXML de chaque fichier ouvert : réécrits à l'arrêt si l'heure se cale sur le LTC. */
+    private val takeMetadata = HashMap<WavWriter, Pair<Bext, ByteArray>>()
+    /** Ancrage LTC trouvé avant une reprise de capture (le nouveau moteur repart de zéro). */
+    private var savedAnchor: LtcAnchor? = null
     private var consoleVisible = false
     private var saveJob: Job? = null
 
@@ -191,6 +198,7 @@ class RecorderController(private val context: Context) {
     private fun applyMonitor() {
         val s = _state.value
         engine?.monitorEnabled = s.options.monitor && s.headphones
+        engine?.ltcChannel = s.options.ltcChannel
     }
 
     /** Change le dossier de destination (null = dossier par défaut). Sans effet pendant une prise. */
@@ -360,6 +368,7 @@ class RecorderController(private val context: Context) {
         val e = engine ?: return false
         val s = _state.value
         // Le fichier commence au début du pré-enregistrement : l'horodatage en tient compte.
+        savedAnchor = null
         val prerollFrames = e.prerollFrames
         val start = LocalDateTime.now().minusNanos(prerollFrames * 1_000_000_000L / e.format.sampleRate)
         val main = openTakeFile(start, "", e.format, null) ?: return false
@@ -396,13 +405,11 @@ class RecorderController(private val context: Context) {
             } else {
                 listOf(context.getString(R.string.format_mono))
             }
-            file to WavWriter(
-                file.channel, format,
-                listOf(
-                    Bext.CHUNK_ID to bext.encode(),
-                    Ixml.CHUNK_ID to Ixml.encode(bext.description, "Brut", bext.originatorReference, tracks),
-                ),
-            )
+            val speed = IxmlSpeed(_state.value.options.timecodeRate, format.sampleRate, format.bitDepth.bits, bext.timeReference)
+            val ixml = Ixml.encode(bext.description, "Brut", bext.originatorReference, tracks, speed)
+            val writer = WavWriter(file.channel, format, listOf(Bext.CHUNK_ID to bext.encode(), Ixml.CHUNK_ID to ixml))
+            takeMetadata[writer] = bext to ixml
+            file to writer
         } catch (_: IOException) {
             file.discard()
             _state.update { it.copy(message = UserMessage.WriteFailed) }
@@ -438,6 +445,27 @@ class RecorderController(private val context: Context) {
         )
     }
 
+    /**
+     * Cale l'heure de départ des fichiers de la prise sur le LTC reçu : la première image
+     * validée donne l'étiquette et sa position dans le fichier ; la cadence vient de la plus
+     * longue série mesurée. Retourne l'heure de départ (« 14:30:00:12 »), ou null sans LTC.
+     */
+    private fun stampFromLtc(writers: TakeWriters, source: RecordingEngine): String? {
+        val metadata = listOfNotNull(writers.main, writers.safety).associateWith { takeMetadata.remove(it) }
+        if (_state.value.options.ltcChannel == null) return null
+        val anchor = savedAnchor ?: source.takeAnchor ?: return null
+        val sr = source.format.sampleRate
+        val rate = (source.latestLtc ?: anchor.frame).rateAt(sr)
+        val day = 86_400L * sr
+        val tr = Math.floorMod(Timecode.samplesSinceMidnight(anchor.frame.timecode, rate, sr) - anchor.fileFrame, day)
+        for ((w, meta) in metadata) {
+            val (bext, ixml) = meta ?: continue
+            w.rewriteChunk(Bext.CHUNK_ID, bext.copy(timeReference = tr).encode())
+            Ixml.withTimestamp(ixml, IxmlSpeed(rate, sr, source.format.bitDepth.bits, tr))?.let { w.rewriteChunk(Ixml.CHUNK_ID, it) }
+        }
+        return Timecode.fromSamples(tr, rate, sr).format(rate)
+    }
+
     private fun signedDb(db: Float) = String.format(java.util.Locale.getDefault(), "%+.1f", db)
 
     fun stopRecording(message: UserMessage? = null) {
@@ -453,6 +481,7 @@ class RecorderController(private val context: Context) {
         val safety = safetyFile
         currentFile = null
         safetyFile = null
+        val ltc = writers?.let { stampFromLtc(it, e) }
         var finalMessage = message
         if (file != null) {
             try {
@@ -460,7 +489,9 @@ class RecorderController(private val context: Context) {
                 // écrite : son en-tête a été mis à jour au fil de la prise.
                 if (writers != null) writers.main.close() else file.channel.close()
                 file.publish()
-                if (finalMessage == null) finalMessage = UserMessage.Saved(file.displayName)
+                if (finalMessage == null) {
+                    finalMessage = UserMessage.Saved(file.displayName, ltc, ltcMissing = ltc == null && _state.value.options.ltcChannel != null)
+                }
             } catch (_: Exception) {
                 finalMessage = UserMessage.WriteFailed
             }
@@ -513,11 +544,13 @@ class RecorderController(private val context: Context) {
     private fun resumeCapture(): Boolean {
         val old = engine ?: return false
         val writers = old.detachWriter() ?: return false
+        savedAnchor = savedAnchor ?: old.takeAnchor
         closeEngine()
         // Le format est verrouillé pendant une prise : la nouvelle capture est compatible.
         val fresh = openEngine()
         if (fresh == null) {
             // L'entrée ne revient pas : on sauvegarde proprement ce qui a été capté.
+            val ltc = stampFromLtc(writers, old)
             runCatching { writers.main.close() }
             runCatching { writers.safety?.close() }
             runCatching { currentFile?.publish() }
@@ -525,7 +558,7 @@ class RecorderController(private val context: Context) {
             val name = currentFile?.displayName.orEmpty()
             currentFile = null
             safetyFile = null
-            _state.update { it.copy(phase = Phase.STOPPED, message = UserMessage.Saved(name)) }
+            _state.update { it.copy(phase = Phase.STOPPED, message = UserMessage.Saved(name, ltc)) }
             return true
         }
         val label = context.getString(R.string.marker_resumed)
@@ -595,8 +628,12 @@ class RecorderController(private val context: Context) {
             val refreshFree = now - lastFreeCheck > 5_000
             if (refreshFree) lastFreeCheck = now
             val free = if (refreshFree) storage.freeBytes() else null
+            val e = engine
+            val ltcReadout = e?.latestLtc?.takeIf { _state.value.options.ltcChannel != null && e.position - it.startSample < e.format.sampleRate / 2 }
+                ?.let { it.timecode.format(it.rateAt(e.format.sampleRate)) }
             _state.update {
                 it.copy(
+                    ltcReadout = ltcReadout,
                     levels = levels,
                     framesWritten = if (it.isRecording) framesWritten else it.framesWritten,
                     freeBytes = free ?: it.freeBytes,

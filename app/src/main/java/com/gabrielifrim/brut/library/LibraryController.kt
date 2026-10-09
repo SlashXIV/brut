@@ -20,6 +20,12 @@ import com.gabrielifrim.brut.audio.Bext
 import com.gabrielifrim.brut.audio.ChannelPick
 import com.gabrielifrim.brut.audio.ExportSpec
 import com.gabrielifrim.brut.audio.Ixml
+import com.gabrielifrim.brut.audio.IxmlSpeed
+import com.gabrielifrim.brut.audio.LtcDecoder
+import com.gabrielifrim.brut.audio.LtcFrame
+import com.gabrielifrim.brut.audio.Timecode
+import com.gabrielifrim.brut.audio.TimecodeRate
+import com.gabrielifrim.brut.audio.WavReader
 import com.gabrielifrim.brut.audio.WavExport
 import com.gabrielifrim.brut.audio.WavInfo
 import com.gabrielifrim.brut.storage.RecordingStorage
@@ -39,6 +45,8 @@ sealed interface LibraryMessage {
     data object Failed : LibraryMessage
     /** [count] fichiers créés ; [name] est celui du fichier quand il n'y en a qu'un. */
     data class Exported(val name: String, val count: Int, val clipped: Long) : LibraryMessage
+    data class LtcStamped(val timecode: String) : LibraryMessage
+    data object LtcNotFound : LibraryMessage
 }
 
 /** Sélection [start, end[ (en trames) en cours d'édition sur la prise ouverte. */
@@ -171,6 +179,63 @@ class LibraryController(private val context: Context, customFolder: () -> androi
     }
 
     fun shareIntent(take: Take): Intent = repository.shareIntent(take)
+
+    // --- Timecode -----------------------------------------------------------------
+
+    /**
+     * Lit le LTC enregistré sur la voie [channel] et cale l'heure de départ de la prise
+     * dessus (bext + iXML, réécrits en place ; le son n'est pas touché).
+     */
+    fun stampFromLtc(take: Take, channel: Int) {
+        val info = take.info ?: return
+        if (info.bext == null) return
+        val retry: suspend () -> Unit = { stampFromLtc(take, channel) }
+        scope.launch {
+            val found = withContext(Dispatchers.IO) { readLtc(take, info, channel) }
+            if (found == null) {
+                _state.update { it.copy(message = LibraryMessage.LtcNotFound) }
+                return@launch
+            }
+            val (anchor, rate) = found
+            val sr = info.sampleRate
+            val tr = Math.floorMod(Timecode.samplesSinceMidnight(anchor.timecode, rate, sr) - anchor.startSample, 86_400L * sr)
+            val speed = IxmlSpeed(rate, sr, info.bitsPerSample, tr)
+            handle(repository.patchTimestamp(take, speed), retry) {
+                _state.update { it.copy(message = LibraryMessage.LtcStamped(Timecode.fromSamples(tr, rate, sr).format(rate))) }
+                refresh()
+            }
+        }
+    }
+
+    /** Première image validée (l'ancrage) et cadence mesurée sur la plus longue série. */
+    private fun readLtc(take: Take, info: com.gabrielifrim.brut.audio.WavInfo, channel: Int): Pair<LtcFrame, TimecodeRate>? {
+        val input = openChannel(context, take) ?: return null
+        return input.use { ch ->
+            val decoder = LtcDecoder(info.sampleRate)
+            val block = 8192
+            val samples = FloatArray(block * info.channels)
+            val scratch = java.nio.ByteBuffer.allocate(block * info.blockAlign)
+            var anchor: LtcFrame? = null
+            var latest: LtcFrame? = null
+            var validated = 0
+            var frame = 0L
+            // Deux secondes d'images validées suffisent à séparer 23,976 de 24.
+            while (frame < info.frames && validated < 50) {
+                val n = WavReader.readFrames(ch, info, frame, block, samples, scratch)
+                if (n == 0) break
+                decoder.process(samples, n, info.channels, channel.coerceIn(0, info.channels - 1), frame) { f, ok ->
+                    if (ok) {
+                        if (anchor == null) anchor = f
+                        latest = f
+                        validated++
+                    }
+                }
+                frame += n
+            }
+            val a = anchor ?: return@use null
+            a to (latest ?: a).rateAt(info.sampleRate)
+        }
+    }
 
     // --- Édition ------------------------------------------------------------------
 
@@ -307,9 +372,10 @@ class LibraryController(private val context: Context, customFolder: () -> androi
             val description = listOfNotNull(origin, source.description.takeIf { it.isNotBlank() }).joinToString(" ; ")
             WavExport.derivedBext(source, info, spec, target, name, "Brut $appVersion", description)
         }
+        val speed = bext?.let { IxmlSpeed(info.timecodeRate ?: TimecodeRate.DEFAULT, target.sampleRate, target.bitDepth.bits, it.timeReference) }
         return listOfNotNull(
             bext?.let { Bext.CHUNK_ID to it.encode() },
-            Ixml.CHUNK_ID to Ixml.encode(note, "Brut", name, tracks),
+            Ixml.CHUNK_ID to Ixml.encode(note, "Brut", name, tracks, speed),
         )
     }
 

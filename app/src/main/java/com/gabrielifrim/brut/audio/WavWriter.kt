@@ -35,6 +35,8 @@ class WavWriter(
     private val rf64Threshold: Long = 0xFFFF_FFFFL,
 ) : Closeable {
 
+    /** Position et taille du corps de chaque chunk de métadonnées, pour les réécrire en place. */
+    private val chunkBodies = HashMap<String, Pair<Long, Int>>()
     private val headerSize: Int
     private val factOffset: Int?
     private val markers = mutableListOf<Marker>()
@@ -62,6 +64,18 @@ class WavWriter(
     /** Pose un repère à la position courante de la prise (écrit à la fermeture). */
     fun addMarker(label: String, frame: Long = framesWritten) {
         markers += Marker(frame, label)
+    }
+
+    /**
+     * Remplace le corps d'un chunk de métadonnées par un corps de même taille (heure de
+     * départ calée sur le LTC à la fin de la prise). Faux si le chunk est absent ou si la
+     * taille diffère.
+     */
+    fun rewriteChunk(id: String, body: ByteArray): Boolean {
+        val (offset, size) = chunkBodies[id] ?: return false
+        if (body.size != size) return false
+        writeFully(ByteBuffer.wrap(body), offset)
+        return true
     }
 
     /** Toujours faux en pratique : le RF64 lève la limite des 4 Go. Garde-fou contre un débordement. */
@@ -150,7 +164,9 @@ class WavWriter(
         }
         for ((id, body) in extraChunks) {
             require(id.length == 4) { "Identifiant de chunk invalide : $id" }
-            b.put(ascii(id)); b.putInt(body.size); b.put(body)
+            b.put(ascii(id)); b.putInt(body.size)
+            chunkBodies[id] = b.position().toLong() to body.size
+            b.put(body)
             if (body.size and 1 == 1) b.put(0)
         }
         b.put(ascii("data")); b.putInt(0)

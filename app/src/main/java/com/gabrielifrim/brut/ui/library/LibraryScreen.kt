@@ -105,6 +105,7 @@ interface LibraryActions {
     fun endTrim()
     fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, sampleRate: Int?, split: Boolean)
     fun cancelExport()
+    fun stampFromLtc(take: Take, channel: Int)
 }
 
 private fun dateFormat(locale: Locale): DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", locale)
@@ -121,6 +122,7 @@ fun LibraryScreen(
 ) {
     BackHandler(onBack = actions::back)
     var renaming by remember { mutableStateOf<Take?>(null) }
+    var stamping by remember { mutableStateOf<Take?>(null) }
     var deleting by remember { mutableStateOf<Take?>(null) }
 
     Box(
@@ -168,6 +170,7 @@ fun LibraryScreen(
                                 recording = recording,
                                 actions = actions,
                                 onRename = { renaming = take },
+                                onStamp = { stamping = take },
                                 // Sans corbeille possible, la suppression est définitive : on confirme.
                                 onDelete = { if (take.canUndoDelete) actions.trash(take) else deleting = take },
                             )
@@ -187,6 +190,14 @@ fun LibraryScreen(
             name = take.baseName,
             onConfirm = { actions.trash(take); deleting = null },
             onDismiss = { deleting = null },
+        )
+    }
+
+    stamping?.let { take ->
+        StampDialog(
+            stereo = (take.info?.channels ?: 1) >= 2,
+            onChannel = { actions.stampFromLtc(take, it); stamping = null },
+            onDismiss = { stamping = null },
         )
     }
 
@@ -334,6 +345,7 @@ private fun MountedTake(
     actions: LibraryActions,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onStamp: () -> Unit,
 ) {
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -363,6 +375,11 @@ private fun MountedTake(
                 }
             }
             PlaybackRow(take, player, enabled = !recording, actions)
+            info?.bext?.let { b ->
+                val rate = info.timecodeRate ?: com.gabrielifrim.brut.audio.TimecodeRate.DEFAULT
+                val tc = com.gabrielifrim.brut.audio.Timecode.fromSamples(b.timeReference, rate, info.sampleRate).format(rate)
+                Text(stringResource(R.string.library_tc, tc, rate.label), style = BrutType.ReadoutSmall, color = BrutColors.Amber)
+            }
             if (recording) {
                 Text(stringResource(R.string.library_recording_busy), style = BrutType.Body, color = BrutColors.Amber)
             }
@@ -370,8 +387,12 @@ private fun MountedTake(
                 Text(it, style = BrutType.Body, color = BrutColors.CreamDim)
             }
             // L'édition ne crée que de nouveaux fichiers : elle reste possible sur toute prise lisible.
-            ActionButton(stringResource(R.string.library_edit), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = (info?.frames ?: 0L) > 0L) {
-                actions.startTrim(take)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(stringResource(R.string.library_edit), BrutColors.Amber, Modifier.weight(1f), enabled = (info?.frames ?: 0L) > 0L) {
+                    actions.startTrim(take)
+                }
+                // Le calage réécrit l'heure du bext : sans bext (fichier étranger), rien à caler.
+                ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Amber, Modifier.weight(1f), enabled = info?.bext != null && !recording, onClick = onStamp)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(stringResource(R.string.library_rename), BrutColors.Cream, Modifier.weight(1f), onClick = onRename)
@@ -538,6 +559,28 @@ private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: 
     }
 }
 
+/** Choix de la voie qui porte le LTC, et ce que le calage fait (et ne fait pas). */
+@Composable
+private fun StampDialog(stereo: Boolean, onChannel: (Int) -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.library_ltc_stamp), style = BrutType.Title, color = BrutColors.Cream)
+                Text(stringResource(R.string.library_ltc_body), style = BrutType.Body, color = BrutColors.CreamDim)
+                if (stereo) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionButton(stringResource(R.string.library_ltc_left), BrutColors.Amber, Modifier.weight(1f)) { onChannel(0) }
+                        ActionButton(stringResource(R.string.library_ltc_right), BrutColors.Amber, Modifier.weight(1f)) { onChannel(1) }
+                    }
+                } else {
+                    ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Amber, Modifier.fillMaxWidth()) { onChannel(0) }
+                }
+                ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.fillMaxWidth(), onClick = onDismiss)
+            }
+        }
+    }
+}
+
 @Composable
 private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
     var value by rememberSaveable { mutableStateOf(initial) }
@@ -594,7 +637,7 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 .clip(RoundedCornerShape(4.dp))
                 .background(BrutColors.PanelRaised)
                 .semantics { liveRegion = LiveRegionMode.Polite }
-                .drawBehind { drawRect(if (m is LibraryMessage.Failed || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
+                .drawBehind { drawRect(if (m is LibraryMessage.Failed || m is LibraryMessage.LtcNotFound || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -602,6 +645,8 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 is LibraryMessage.Trashed -> stringResource(R.string.library_trashed, m.take.baseName)
                 is LibraryMessage.Renamed -> stringResource(R.string.library_renamed, m.name)
                 LibraryMessage.Failed -> stringResource(R.string.library_failed)
+                is LibraryMessage.LtcStamped -> stringResource(R.string.library_ltc_done, m.timecode)
+                LibraryMessage.LtcNotFound -> stringResource(R.string.library_ltc_missing)
                 is LibraryMessage.Exported -> {
                     val done = if (m.count == 1) {
                         stringResource(R.string.library_exported, m.name)

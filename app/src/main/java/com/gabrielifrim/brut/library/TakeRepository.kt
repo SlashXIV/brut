@@ -128,6 +128,22 @@ class TakeRepository(
         }
     }.getOrNull()
 
+    /** Réécrit en place l'heure de départ (bext + iXML) ; les octets audio ne bougent pas. */
+    suspend fun patchTimestamp(take: Take, speed: com.gabrielifrim.brut.audio.IxmlSpeed): EditResult = withContext(Dispatchers.IO) {
+        take.file?.let { f ->
+            return@withContext runCatching {
+                java.io.RandomAccessFile(f, "rw").channel.use { com.gabrielifrim.brut.audio.WavMetadata.patchTimestamp(it, it, speed) }
+            }.getOrDefault(false).let { if (it) EditResult.Done else EditResult.Failed }
+        }
+        guarded(take) {
+            resolver.openFileDescriptor(take.uri, "rw")!!.use { pfd ->
+                val input = FileInputStream(pfd.fileDescriptor).channel
+                val output = java.io.FileOutputStream(pfd.fileDescriptor).channel
+                if (com.gabrielifrim.brut.audio.WavMetadata.patchTimestamp(input, output, speed)) 1 else 0
+            }
+        }
+    }
+
     suspend fun rename(take: Take, newBaseName: String): EditResult = withContext(Dispatchers.IO) {
         val clean = sanitize(newBaseName).ifBlank { return@withContext EditResult.Failed }
         val newName = "$clean.wav"

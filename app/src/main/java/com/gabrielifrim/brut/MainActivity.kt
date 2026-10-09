@@ -195,6 +195,7 @@ class MainActivity : ComponentActivity() {
         override fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, sampleRate: Int?, split: Boolean) =
             library.export(take, bitDepth, channels, sampleRate, split)
         override fun cancelExport() = library.cancelExport()
+        override fun stampFromLtc(take: Take, channel: Int) = library.stampFromLtc(take, channel)
     }
 
     private fun readPermission() =

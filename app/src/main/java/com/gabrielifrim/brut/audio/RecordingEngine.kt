@@ -52,6 +52,9 @@ data class CaptureInfo(
 
 class EngineStartException(message: String) : Exception(message)
 
+/** Première image LTC validée pendant la prise, et la trame du fichier où elle commence. */
+data class LtcAnchor(val frame: LtcFrame, val fileFrame: Long)
+
 /** Fichiers d'une prise : le principal et, si demandée, la piste de sécurité. */
 data class TakeWriters(val main: WavWriter, val safety: WavWriter?)
 
@@ -107,6 +110,26 @@ class RecordingEngine(
     /** Écoute de contrôle au casque (latence de quelques dizaines de ms). */
     @Volatile var monitorEnabled = false
     private var monitor: AudioTrack? = null
+
+    /** Voie qui porte un LTC (null = aucune) ; lu avant le gain, tel qu'il arrive. */
+    @Volatile var ltcChannel: Int? = null
+    private val ltc = LtcDecoder(format.sampleRate)
+    private var ltcDecoding: Int? = null
+
+    /** Échantillons captés depuis l'ouverture : l'horloge commune au LTC et au fichier. */
+    @Volatile var position = 0L
+        private set
+
+    /** Dernière image LTC validée (affichage, et cadence mesurée sur la plus longue série). */
+    @Volatile var latestLtc: LtcFrame? = null
+        private set
+
+    /** Ancrage LTC de la prise en cours ; conservé après [detachWriter] pour le calage. */
+    @Volatile var takeAnchor: LtcAnchor? = null
+        private set
+    @Volatile private var takeActive = false
+    // Échantillon absolu correspondant à la trame 0 du fichier (pré-enregistrement compris).
+    private var fileBase = Long.MIN_VALUE
 
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -200,6 +223,9 @@ class RecordingEngine(
             safetyGain = LevelMeter.dbToLinear(safetyDb)
             prerollPending = withPreroll
             if (!withPreroll) preroll.clear()
+            takeAnchor = null
+            fileBase = Long.MIN_VALUE
+            takeActive = true
         }
 
     /** Trames actuellement disponibles dans le tampon de pré-enregistrement. */
@@ -217,6 +243,7 @@ class RecordingEngine(
         val pair = TakeWriters(w, safety)
         writer = null
         safety = null
+        takeActive = false
         pair
     }
 
@@ -262,6 +289,7 @@ class RecordingEngine(
             val readFrames = read / format.channels
             if (readFrames == 0) continue
 
+            decodeLtc(floats, readFrames)
             meter.inspectInput(floats, readFrames)
             val modified = gain.apply(floats, readFrames)
             meter.process(floats, readFrames)
@@ -280,6 +308,8 @@ class RecordingEngine(
                     prerollPending = false
                     preroll.drain(scratch) { chunk, n -> writeBlock(w, chunk, n, null, false, bytes) }
                 }
+                // La trame du fichier où commence ce bloc relie l'horloge de capture au fichier.
+                if (fileBase == Long.MIN_VALUE) fileBase = position - w.framesWritten
                 writeBlock(w, floats, readFrames, shorts, modified, bytes)
                 sinceHeader += readFrames
                 if (sinceHeader >= headerEvery) {
@@ -289,6 +319,7 @@ class RecordingEngine(
                 written = w.framesWritten
             }
 
+            position += readFrames
             sincePublish += readFrames
             if (sincePublish >= publishEvery) {
                 sincePublish = 0
@@ -307,6 +338,26 @@ class RecordingEngine(
     }
 
     private var safetyScratch = FloatArray(0)
+
+    private fun decodeLtc(floats: FloatArray, frames: Int) {
+        val ch = ltcChannel?.coerceIn(0, format.channels - 1)
+        if (ch != ltcDecoding) {
+            ltc.reset()
+            ltcDecoding = ch
+            latestLtc = null
+        }
+        if (ch == null) return
+        ltc.process(floats, frames, format.channels, ch, position) { frame, validated ->
+            if (!validated) return@process
+            latestLtc = frame
+            val base = fileBase
+            // La première image validée de la prise sert d'ancrage : plus elle est proche du
+            // début, moins la dérive entre l'horloge du téléphone et celle du LTC compte.
+            if (takeActive && takeAnchor == null && base != Long.MIN_VALUE && frame.startSample >= base) {
+                takeAnchor = LtcAnchor(frame, frame.startSample - base)
+            }
+        }
+    }
 
     /** Écrit un bloc dans le fichier principal et, le cas échéant, dans la piste de sécurité. */
     private fun writeBlock(w: WavWriter, floats: FloatArray, frames: Int, shorts: ShortArray?, modified: Boolean, bytes: ByteArray) {
