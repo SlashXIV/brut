@@ -44,6 +44,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gabrielifrim.brut.audio.AudioFormatSpec
+import com.gabrielifrim.brut.audio.BitDepth
+import com.gabrielifrim.brut.audio.ChannelPick
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.TakeOptions
 import com.gabrielifrim.brut.audio.MeterMode
@@ -168,6 +170,12 @@ class MainActivity : ComponentActivity() {
             library.refresh()
         }
         override fun consumeMessage() = library.consumeMessage()
+        override fun startTrim(take: Take) = library.startTrim(take)
+        override fun setTrim(start: Long, end: Long) = library.setTrim(start, end)
+        override fun endTrim() = library.endTrim()
+        override fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, split: Boolean) =
+            library.export(take, bitDepth, channels, split)
+        override fun cancelExport() = library.cancelExport()
     }
 
     private fun readPermission() =

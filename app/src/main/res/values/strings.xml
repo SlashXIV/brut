@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Brut</string>
 
     <!-- Notification -->
@@ -193,4 +193,48 @@
     <string name="library_delete_title">Supprimer définitivement ?</string>
     <string name="library_delete_body">« %1$s » est dans un dossier choisi, sans corbeille : la suppression ne pourra pas être annulée.</string>
     <string name="library_failed">Opération impossible sur cette prise.</string>
+    <string name="library_edit">Éditer</string>
+    <string name="trim_in">IN</string>
+    <string name="trim_out">OUT</string>
+    <string name="trim_length">Durée</string>
+    <string name="trim_in_here">IN ici</string>
+    <string name="trim_out_here">OUT ici</string>
+    <string name="trim_all">Tout</string>
+    <string name="trim_waveform">Sélection : glisser les poignées IN et OUT, toucher pour se placer</string>
+    <string name="trim_hint">Seule la sélection est jouée. « IN ici » et « OUT ici » posent une poignée à la tête de lecture ; près d’un repère, la poignée s’y aimante.</string>
+    <string name="export_title">Export</string>
+    <string name="export_depth">RÉSOLUTION</string>
+    <string name="export_channels">VOIES</string>
+    <string name="export_original">ORIG.</string>
+    <string name="export_both">G+D</string>
+    <string name="export_left">G</string>
+    <string name="export_right">D</string>
+    <string name="export_hint_exact">Résolution d’origine : la sélection est recopiée à l’octet près.</string>
+    <string name="export_hint_convert">Conversion en %1$s, sans tramage.</string>
+    <string name="export_hint_clip">La prise est en flottant : ses crêtes au-delà de 0 dBFS seront écrêtées.</string>
+    <string name="export_hint_channel">Voie %1$s seule, ses échantillons recopiés tels quels.</string>
+    <string name="export_hint_original">L’original n’est jamais modifié ; la fréquence d’échantillonnage reste celle de la prise.</string>
+    <string name="export_selection">Exporter la sélection</string>
+    <string name="export_split">Découper aux repères · %1$d</string>
+    <string name="export_close">Fermer</string>
+    <string name="export_running">Export… %1$d %%</string>
+    <string name="export_cancel">Annuler</string>
+    <string name="export_busy">Export indisponible pendant un enregistrement.</string>
+    <!-- « bit » est une unité, invariable. -->
+    <string name="export_depth_int" tools:ignore="PluralsCandidate">%1$d bit</string>
+    <string name="export_depth_float">32 bit flottant</string>
+    <string name="export_note">Extrait de « %1$s », %2$s → %3$s.</string>
+    <string name="export_note_convert">Converti en %1$s sans tramage.</string>
+    <string name="export_note_channel">Voie %1$s seule.</string>
+    <string name="export_suffix_extract">extrait</string>
+    <string name="export_suffix_part">partie</string>
+    <string name="library_exported">Exporté : %1$s</string>
+    <plurals name="library_exported_parts">
+        <item quantity="one">%d morceau exporté</item>
+        <item quantity="other">%d morceaux exportés</item>
+    </plurals>
+    <plurals name="library_exported_clipped">
+        <item quantity="one">%d échantillon écrêté à la conversion</item>
+        <item quantity="other">%d échantillons écrêtés à la conversion</item>
+    </plurals>
 </resources>

@@ -66,6 +66,16 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Métadonnées **Broadcast Wave** (`bext`) et **iXML** dans chaque fichier : date, heure,
   entrée, gain, mode de capture, noms de pistes — relues par les logiciels de montage
 
+**Édition légère, jamais destructive**
+- **Rogner** le début et la fin entre deux poignées IN et OUT, qui s’aimantent aux repères ;
+  seule la sélection est jouée pendant le réglage
+- **Découper aux repères** : un fichier par morceau
+- Chaque export est un **nouveau fichier** : l’original n’est jamais modifié
+- À résolution d’origine, l’extrait est **identique octet par octet** à la portion de la prise
+- Conversion au choix vers 16, 24 ou 32 bit flottant (sans tramage, écrêtages signalés) et
+  extraction d’une seule voie ; la fréquence d’échantillonnage reste celle de la prise
+- L’horodatage BWF de l’extrait est décalé d’autant : la synchronisation avec une caméra reste juste
+
 Les prises sont rangées par défaut dans `Musique/Brut`, visibles depuis n’importe quel lecteur ou
 depuis un ordinateur branché en USB, ou dans le dossier de ton choix.
 

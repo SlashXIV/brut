@@ -58,6 +58,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.gabrielifrim.brut.R
+import com.gabrielifrim.brut.audio.BitDepth
+import com.gabrielifrim.brut.audio.ChannelPick
 import com.gabrielifrim.brut.audio.LevelMeter
 import com.gabrielifrim.brut.library.LibraryMessage
 import com.gabrielifrim.brut.library.LibraryState
@@ -96,6 +98,11 @@ interface LibraryActions {
     fun chooseFolder()
     fun resetFolder()
     fun consumeMessage()
+    fun startTrim(take: Take)
+    fun setTrim(start: Long, end: Long)
+    fun endTrim()
+    fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, split: Boolean)
+    fun cancelExport()
 }
 
 private val DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.FRANCE)
@@ -153,6 +160,8 @@ fun LibraryScreen(
                             MountedTake(
                                 take = take,
                                 waveform = state.waveforms[take.key],
+                                trim = state.trim?.takeIf { it.takeKey == take.key },
+                                exportProgress = state.exportProgress,
                                 player = player,
                                 recording = recording,
                                 actions = actions,
@@ -314,6 +323,8 @@ private fun formatLine(take: Take): String {
 private fun MountedTake(
     take: Take,
     waveform: Waveform?,
+    trim: com.gabrielifrim.brut.library.TrimState?,
+    exportProgress: Float?,
     player: PlayerState,
     recording: Boolean,
     actions: LibraryActions,
@@ -326,6 +337,10 @@ private fun MountedTake(
                 TakeHeader(take, Modifier.weight(1f).clickable { actions.select(take) })
             }
             val info = take.info
+            if (info != null && trim != null) {
+                TrimPanel(take, info, trim, waveform, player, exportProgress, recording, actions)
+                return@Column
+            }
             val markerFractions = info?.takeIf { it.frames > 0 }?.markers?.map { it.frame.toFloat() / info.frames }.orEmpty()
             WaveformView(waveform, player.fraction, markerFractions, enabled = info != null, onSeek = actions::seek)
             // Repères posés pendant la prise (coupure du micro, reprise…) : toucher = s'y placer.
@@ -343,37 +358,21 @@ private fun MountedTake(
                     Text(m.label, style = BrutType.Body, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PlayButton(player.playing, enabled = take.info != null && !recording, onClick = actions::togglePlay)
-                Spacer(Modifier.width(12.dp))
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(role = Role.Switch) { actions.setLoop(!player.loop) }
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Lamp(BrutColors.Amber, lit = player.loop)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.library_loop).uppercase(), style = engraved(BrutType.Legend), color = if (player.loop) BrutColors.Cream else BrutColors.CreamDim)
-                }
-                Spacer(Modifier.weight(1f))
-                Readout(
-                    formatDuration(player.positionSeconds, withHundredths = false) + " / " +
-                        formatDuration(take.info?.durationSeconds ?: 0.0, withHundredths = false),
-                    color = BrutColors.Cream,
-                )
-            }
+            PlaybackRow(take, player, enabled = !recording, actions)
             if (recording) {
                 Text(stringResource(R.string.library_recording_busy), style = BrutType.Body, color = BrutColors.Amber)
             }
             take.info?.description?.let {
                 Text(it, style = BrutType.Body, color = BrutColors.CreamDim)
             }
+            // L'édition ne crée que de nouveaux fichiers : elle reste possible sur toute prise lisible.
+            ActionButton(stringResource(R.string.library_edit), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = (info?.frames ?: 0L) > 0L) {
+                actions.startTrim(take)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(stringResource(R.string.library_rename), BrutColors.Cream, Modifier.weight(1f), onRename)
+                ActionButton(stringResource(R.string.library_rename), BrutColors.Cream, Modifier.weight(1f), onClick = onRename)
                 ActionButton(stringResource(R.string.library_share), BrutColors.Cream, Modifier.weight(1f)) { actions.share(take) }
-                ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onDelete)
+                ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onClick = onDelete)
             }
         }
     }
@@ -432,7 +431,7 @@ private fun WaveformView(waveform: Waveform?, fraction: Float, markers: List<Flo
 }
 
 @Composable
-private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val label = stringResource(if (playing) R.string.library_pause else R.string.library_play)
     Box(
         Modifier
@@ -467,7 +466,7 @@ private fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ActionButton(text: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
+internal fun ActionButton(text: String, color: Color, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         modifier
             .clip(RoundedCornerShape(4.dp))
@@ -475,11 +474,11 @@ private fun ActionButton(text: String, color: Color, modifier: Modifier, onClick
                 drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF3B342C), Color(0xFF221E19))), cornerRadius = CornerRadius(4.dp.toPx()))
                 drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f))
             }
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = 10.dp),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text.uppercase(), style = engraved(BrutType.Legend), color = color, maxLines = 1)
+        Text(text.uppercase(), style = engraved(BrutType.Legend), color = if (enabled) color else BrutColors.CreamFaint, maxLines = 1)
     }
 }
 
@@ -527,8 +526,8 @@ private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: 
                 Text(stringResource(R.string.library_delete_title), style = BrutType.Title, color = BrutColors.Cream)
                 Text(stringResource(R.string.library_delete_body, name), style = BrutType.Body, color = BrutColors.CreamDim)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onDismiss)
-                    ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onConfirm)
+                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onClick = onDismiss)
+                    ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onClick = onConfirm)
                 }
             }
         }
@@ -561,7 +560,7 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
                 }
                 Text(stringResource(R.string.library_rename_hint), style = BrutType.Body, color = BrutColors.CreamDim)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onDismiss)
+                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onClick = onDismiss)
                     ActionButton(stringResource(R.string.library_rename), BrutColors.Amber, Modifier.weight(1f)) {
                         if (value.isNotBlank()) onConfirm(value)
                     }
@@ -578,7 +577,7 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
     LaunchedEffect(message) {
         if (message != null) {
             shown = message
-            kotlinx.coroutines.delay(if (message is LibraryMessage.Trashed) 6000 else 3000)
+            kotlinx.coroutines.delay(if (message is LibraryMessage.Trashed || message is LibraryMessage.Exported) 6000 else 3000)
             actions.consumeMessage()
         }
     }
@@ -590,7 +589,7 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(BrutColors.PanelRaised)
-                .drawBehind { drawRect(if (m is LibraryMessage.Failed) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
+                .drawBehind { drawRect(if (m is LibraryMessage.Failed || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -598,6 +597,19 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 is LibraryMessage.Trashed -> stringResource(R.string.library_trashed, m.take.baseName)
                 is LibraryMessage.Renamed -> stringResource(R.string.library_renamed, m.name)
                 LibraryMessage.Failed -> stringResource(R.string.library_failed)
+                is LibraryMessage.Exported -> {
+                    val done = if (m.count == 1) {
+                        stringResource(R.string.library_exported, m.name)
+                    } else {
+                        androidx.compose.ui.res.pluralStringResource(R.plurals.library_exported_parts, m.count, m.count)
+                    }
+                    if (m.clipped > 0) {
+                        val n = m.clipped.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        done + " — " + androidx.compose.ui.res.pluralStringResource(R.plurals.library_exported_clipped, n, n)
+                    } else {
+                        done
+                    }
+                }
             }
             Text(text, style = BrutType.Body, color = BrutColors.Cream, modifier = Modifier.weight(1f))
             if (m is LibraryMessage.Trashed && m.take.canUndoDelete) {

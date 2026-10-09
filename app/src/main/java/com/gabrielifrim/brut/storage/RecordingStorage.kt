@@ -66,8 +66,15 @@ class RecordingStorage(private val context: Context) {
     }
 
     /** [suffix] distingue les fichiers d'une même prise (ex. « _securite »). */
-    fun create(start: LocalDateTime = LocalDateTime.now(), suffix: String = ""): RecordingFile {
-        val name = "Brut_" + start.format(NAME_FORMAT) + suffix + ".wav"
+    fun create(start: LocalDateTime = LocalDateTime.now(), suffix: String = ""): RecordingFile =
+        createNamed("Brut_" + start.format(NAME_FORMAT) + suffix)
+
+    /**
+     * Crée un fichier sous un nom choisi (extrait, morceau). En cas de doublon, le système
+     * (ou [createLegacy]) ajoute un numéro : un fichier existant n'est jamais écrasé.
+     */
+    fun createNamed(baseName: String): RecordingFile {
+        val name = "$baseName.wav"
         val tree = customFolder
         return when {
             tree != null -> createInTree(tree, name)
@@ -201,11 +208,15 @@ class RecordingStorage(private val context: Context) {
     }
 
     private fun createLegacy(name: String): RecordingFile {
-        val file = File(legacyDir().apply { mkdirs() }, name)
+        val dir = legacyDir().apply { mkdirs() }
+        val base = name.removeSuffix(".wav")
+        val file = generateSequence(1) { it + 1 }
+            .map { n -> File(dir, if (n == 1) name else "$base ($n).wav") }
+            .first { !it.exists() }
         val raf = RandomAccessFile(file, "rw")
         markInProgress(KIND_FILE, file.path)
         return RecordingFile(
-            displayName = name,
+            displayName = file.name,
             channel = raf.channel,
             onPublish = {
                 runCatching { raf.close() }

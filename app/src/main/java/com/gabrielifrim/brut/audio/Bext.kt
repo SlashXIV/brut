@@ -48,7 +48,9 @@ data class Bext(
         fun ascii(text: String): String =
             Normalizer.normalize(text, Normalizer.Form.NFD)
                 .replace(Regex("\\p{M}+"), "")
-                .replace('−', '-')
+                .replace('−', '-').replace('–', '-').replace('—', '-')
+                .replace('«', '"').replace('»', '"').replace('’', '\'').replace("→", "->")
+                .replace('\u00A0', ' ').replace('\u202F', ' ')
                 .map { if (it.code in 0x20..0x7E || it == '\r' || it == '\n') it else '?' }
                 .joinToString("")
 

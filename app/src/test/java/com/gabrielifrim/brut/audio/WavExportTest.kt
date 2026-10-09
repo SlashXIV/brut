@@ -158,4 +158,10 @@ class WavExportTest {
             WavExport.export(input, WavReader.readInfo(input), ExportSpec(0, 50_000), RandomAccessFile(tmp.newFile(), "rw").channel, isActive = { false })
         }
     }
+
+    @Test
+    fun `bext translittère la typographie française plutôt que d'écrire des points d'interrogation`() {
+        assertThat(Bext.ascii("Extrait de « Prise », 00:01 → 00:02 ; l’entrée −6 dB"))
+            .isEqualTo("Extrait de \" Prise \", 00:01 -> 00:02 ; l'entree -6 dB")
+    }
 }

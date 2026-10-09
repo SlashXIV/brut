@@ -21,7 +21,12 @@ data class PlayerState(
     val totalFrames: Long = 0,
     val sampleRate: Int = 48_000,
     val loop: Boolean = false,
+    /** Plage jouée (sélection en cours d'édition) ; par défaut, toute la prise. */
+    val regionStart: Long = 0,
+    val regionEnd: Long = -1,
 ) {
+    val end: Long get() = if (regionEnd < 0) totalFrames else regionEnd
+
     val positionSeconds: Double get() = positionFrames.toDouble() / sampleRate
     val totalSeconds: Double get() = totalFrames.toDouble() / sampleRate
     val fraction: Float get() = if (totalFrames == 0L) 0f else (positionFrames.toFloat() / totalFrames).coerceIn(0f, 1f)
@@ -59,7 +64,8 @@ class TakePlayer(private val context: Context) {
         val t = take ?: return
         val i = info ?: return
         if (running) return
-        val start = _state.value.positionFrames.takeIf { it < i.frames } ?: 0L
+        val s = _state.value
+        val start = s.positionFrames.takeIf { it >= s.regionStart && it < s.end } ?: s.regionStart
         running = true
         _state.update { it.copy(playing = true, positionFrames = start) }
         thread = Thread({ loop(t, i, start) }, "brut-lecture").apply { start() }
@@ -87,6 +93,15 @@ class TakePlayer(private val context: Context) {
     }
 
     fun setLoop(loop: Boolean) = _state.update { it.copy(loop = loop) }
+
+    /** Restreint la lecture à [start, end[ ; la tête de lecture y est ramenée si besoin. */
+    fun setRegion(start: Long, end: Long) = _state.update { s ->
+        val pos = if (s.positionFrames in start until end) s.positionFrames else start
+        if (running && pos != s.positionFrames) seekRequest = pos
+        s.copy(regionStart = start, regionEnd = end, positionFrames = pos)
+    }
+
+    fun clearRegion() = _state.update { it.copy(regionStart = 0, regionEnd = -1) }
 
     private fun loop(t: Take, i: WavInfo, startFrame: Long) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
@@ -130,12 +145,14 @@ class TakePlayer(private val context: Context) {
                     frame = seek
                     base = seek - track.playbackHeadPosition
                 }
-                val n = WavReader.readFrames(channel, i, frame, block, samples, scratch)
+                val s = _state.value
+                val wanted = minOf(block.toLong(), s.end - frame).toInt()
+                val n = if (wanted > 0) WavReader.readFrames(channel, i, frame, wanted, samples, scratch) else 0
                 if (n == 0) {
-                    if (_state.value.loop) {
+                    if (s.loop) {
                         // Laisser finir le tampon serait plus juste, mais l'écart est inaudible en boucle.
                         track.pause(); track.flush(); track.play()
-                        frame = 0; base = -track.playbackHeadPosition.toLong()
+                        frame = s.regionStart; base = s.regionStart - track.playbackHeadPosition.toLong()
                         continue
                     }
                     break
@@ -148,7 +165,7 @@ class TakePlayer(private val context: Context) {
             if (running) {
                 // Fin naturelle : laisser sortir ce qui reste dans le tampon.
                 track.stop()
-                _state.update { it.copy(positionFrames = 0) }
+                _state.update { it.copy(positionFrames = it.regionStart) }
             }
         } finally {
             runCatching { track.pause(); track.flush() }
