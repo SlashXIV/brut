@@ -40,6 +40,20 @@ fun formatBytes(bytes: Long): String = when {
     else -> String.format(FR, "%.0f Ko", bytes / 1024.0)
 }
 
+/** Durée lue par TalkBack : « 1 heure 2 minutes 5 secondes » plutôt que « 01:02:05 ». */
+@androidx.compose.runtime.Composable
+fun spokenDuration(seconds: Double): String {
+    val total = seconds.toLong()
+    val h = (total / 3600).toInt()
+    val m = ((total % 3600) / 60).toInt()
+    val s = (total % 60).toInt()
+    return buildList {
+        if (h > 0) add(androidx.compose.ui.res.pluralStringResource(com.gabrielifrim.brut.R.plurals.a11y_hours, h, h))
+        if (m > 0 || h > 0) add(androidx.compose.ui.res.pluralStringResource(com.gabrielifrim.brut.R.plurals.a11y_minutes, m, m))
+        add(androidx.compose.ui.res.pluralStringResource(com.gabrielifrim.brut.R.plurals.a11y_seconds, s, s))
+    }.joinToString(" ")
+}
+
 fun formatLongDuration(seconds: Long): String {
     val h = seconds / 3600
     val m = (seconds % 3600) / 60

@@ -1,5 +1,9 @@
 package com.gabrielifrim.brut.ui.console
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -152,7 +156,7 @@ fun GainFader(
                         db < 0 -> "−${(-db).toInt()}"
                         else -> "0"
                     }
-                    val layout = measurer.measure(text, BrutType.ReadoutSmall.copy(color = if (isZero) BrutColors.Cream else BrutColors.CreamFaint))
+                    val layout = measurer.measure(text, BrutType.ReadoutSmall.copy(color = if (isZero) BrutColors.Cream else BrutColors.CreamDim))
                     drawText(layout, topLeft = Offset(x - layout.size.width / 2f, 0f))
                 }
                 db += 3f
@@ -207,7 +211,12 @@ private fun StepButton(symbol: String, description: String, onClick: () -> Unit)
                 drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f))
             }
             .clickable(role = Role.Button, onClickLabel = description, onClick = onClick)
-            .semantics { contentDescription = description },
+            // Le symbole « − » ou « + » ne se lit pas : seule l'action compte.
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick(description) { onClick(); true }
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(symbol, style = BrutType.BodyStrong, color = BrutColors.Cream)
@@ -234,7 +243,7 @@ fun GainPanel(
                     Row(
                         Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .clickable(role = Role.Switch) { onLinked(!linked) }
+                            .toggleable(value = linked, role = Role.Switch, onValueChange = onLinked)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

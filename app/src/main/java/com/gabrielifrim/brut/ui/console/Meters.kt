@@ -26,14 +26,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.ChannelLevel
+import com.gabrielifrim.brut.audio.LevelMeter
 import com.gabrielifrim.brut.audio.LoudnessReading
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.ui.formatDb
@@ -101,7 +107,7 @@ fun MeterBridge(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             levels.forEachIndexed { c, level ->
-                ClipLamp(level, channelLabels[c], onResetClip)
+                ClipLamp(level, channelLabels[c], spokenChannel(c, levels.size), onResetClip)
                 Spacer(Modifier.width(8.dp))
             }
             Spacer(Modifier.weight(1f))
@@ -117,7 +123,7 @@ fun MeterBridge(
             ) {
                 levels.forEachIndexed { c, level ->
                     if (c == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
-                    LedBar(level, Modifier.weight(1f).fillMaxHeight())
+                    LedBar(level, spokenChannel(c, levels.size), Modifier.weight(1f).fillMaxHeight())
                 }
                 if (levels.size == 1) Scale(Modifier.width(44.dp).fillMaxHeight())
             }
@@ -143,12 +149,12 @@ fun MeterBridge(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 levels.forEachIndexed { c, level ->
-                    VuMeter(level, channelLabels[c], Modifier.weight(1f).fillMaxWidth())
+                    VuMeter(level, channelLabels[c], Modifier.weight(1f).fillMaxWidth().vuSemantics(level, spokenChannel(c, levels.size)))
                 }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            levels.forEachIndexed { c, level -> Readouts(channelLabels[c], level) }
+            levels.forEachIndexed { c, level -> Readouts(channelLabels[c], spokenChannel(c, levels.size), level) }
         }
     }
 }
@@ -165,20 +171,27 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
         MeterMode.LUFS to stringResource(R.string.meter_mode_lufs),
         MeterMode.SPECTRUM to stringResource(R.string.meter_mode_spectrum),
     )
+    val all = MeterMode.entries
+    val next = all[(mode.ordinal + 1) % all.size]
+    val name = stringResource(R.string.a11y_meter_mode)
+    val current = labels.first { it.first == mode }.second
+    val nextLabel = stringResource(R.string.a11y_switch_to, labels.first { it.first == next }.second)
     Row(
         Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(BrutColors.Panel)
-            .clickable(role = Role.Button) {
-                val all = MeterMode.entries
-                onChange(all[(mode.ordinal + 1) % all.size])
+            .clickable(role = Role.Button, onClickLabel = nextLabel) { onChange(next) }
+            .clearAndSetSemantics {
+                contentDescription = name
+                stateDescription = current
+                onClick(nextLabel) { onChange(next); true }
             }
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         labels.forEachIndexed { i, (m, text) ->
             if (i > 0) Text(" \u00B7 ", style = BrutType.Legend, color = BrutColors.CreamFaint)
-            Text(text, style = BrutType.Legend, color = if (m == mode) BrutColors.Amber else BrutColors.CreamFaint)
+            Text(text, style = BrutType.Legend, color = if (m == mode) BrutColors.Amber else BrutColors.CreamDim)
         }
     }
 }
@@ -189,8 +202,16 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
  * changera rien, il faut baisser à la source.
  */
 @Composable
-private fun ClipLamp(level: ChannelLevel, label: String, onReset: () -> Unit) {
-    val description = stringResource(R.string.clip_reset)
+private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset: () -> Unit) {
+    val resetLabel = stringResource(R.string.clip_reset)
+    val name = stringResource(R.string.a11y_clip, spoken)
+    val state = stringResource(
+        when {
+            level.clipped -> R.string.a11y_clip_file
+            level.inputClipped -> R.string.a11y_clip_input
+            else -> R.string.a11y_clip_off
+        },
+    )
     val (lit, color, text) = when {
         level.clipped -> Triple(true, BrutColors.Red, stringResource(R.string.clip))
         level.inputClipped -> Triple(true, BrutColors.Amber, stringResource(R.string.clip_input))
@@ -201,7 +222,13 @@ private fun ClipLamp(level: ChannelLevel, label: String, onReset: () -> Unit) {
             .clip(RoundedCornerShape(4.dp))
             .background(if (lit) color else color.copy(alpha = 0.10f))
             .clickable(onClick = onReset)
-            .semantics { contentDescription = description }
+            // L'état est une région « vivante » : TalkBack annonce la saturation dès qu'elle survient.
+            .clearAndSetSemantics {
+                contentDescription = name
+                stateDescription = state
+                liveRegion = LiveRegionMode.Polite
+                onClick(resetLabel) { onReset(); true }
+            }
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -214,8 +241,17 @@ private fun ClipLamp(level: ChannelLevel, label: String, onReset: () -> Unit) {
 }
 
 @Composable
-private fun LedBar(level: ChannelLevel, modifier: Modifier) {
-    Canvas(modifier.padding(horizontal = 6.dp)) {
+private fun LedBar(level: ChannelLevel, spoken: String, modifier: Modifier) {
+    val name = stringResource(R.string.a11y_peak_meter, spoken)
+    val state = spokenDb(level.peakDb)
+    Canvas(
+        modifier
+            .padding(horizontal = 6.dp)
+            .clearAndSetSemantics {
+                contentDescription = name
+                stateDescription = state
+            },
+    ) {
         val gap = 2.dp.toPx()
         val segH = (size.height - gap * (SEGMENTS - 1)) / SEGMENTS
         val radius = CornerRadius(1.5.dp.toPx())
@@ -249,7 +285,7 @@ private fun LedBar(level: ChannelLevel, modifier: Modifier) {
 private fun Scale(modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val style = BrutType.ReadoutSmall.copy(color = BrutColors.CreamDim, textAlign = TextAlign.Center)
-    Canvas(modifier) {
+    Canvas(modifier.clearAndSetSemantics {}) {
         SCALE_MARKS.forEach { mark ->
             val y = size.height * (1f - meterPosition(mark.toFloat()))
             val text = if (mark == 0) "0" else "−${-mark}"
@@ -262,9 +298,13 @@ private fun Scale(modifier: Modifier) {
 }
 
 @Composable
-private fun Readouts(label: String, level: ChannelLevel) {
+private fun Readouts(label: String, spoken: String, level: ChannelLevel) {
     val floor = stringResource(R.string.dbfs_floor)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val summary = stringResource(R.string.a11y_levels, spoken, spokenDb(level.holdDb), spokenDb(level.rmsDb), spokenDb(level.maxDb))
+    Column(
+        Modifier.clearAndSetSemantics { contentDescription = summary },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(label, style = BrutType.Legend, color = BrutColors.Amber)
         ReadoutLine(stringResource(R.string.meter_peak), formatDb(level.holdDb, signed = true) ?: floor)
         ReadoutLine(stringResource(R.string.meter_rms), formatDb(level.rmsDb) ?: floor)
@@ -278,7 +318,7 @@ private fun Readouts(label: String, level: ChannelLevel) {
 @Composable
 private fun ReadoutLine(name: String, value: String, highlight: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(name, style = BrutType.ReadoutSmall, color = BrutColors.CreamFaint, modifier = Modifier.width(44.dp))
+        Text(name, style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, modifier = Modifier.width(44.dp))
         Text(
             value,
             style = BrutType.Readout,
@@ -286,6 +326,34 @@ private fun ReadoutLine(name: String, value: String, highlight: Boolean = false)
             textAlign = TextAlign.End,
             modifier = Modifier.width(52.dp),
         )
+    }
+}
+
+/** Nom parlé d'une voie : « voie gauche », « voie droite », « mono ». */
+@Composable
+fun spokenChannel(index: Int, count: Int): String = stringResource(
+    when {
+        count == 1 -> R.string.a11y_channel_mono
+        index == 0 -> R.string.a11y_channel_left
+        else -> R.string.a11y_channel_right
+    },
+)
+
+/** Niveau à lire à voix haute, arrondi au décibel : « −12 dBFS », ou « silence ». */
+@Composable
+fun spokenDb(db: Float, unit: String = "dBFS"): String {
+    if (formatDb(db) == null) return stringResource(R.string.a11y_silence)
+    val r = Math.round(db)
+    return stringResource(R.string.a11y_db, if (r < 0) "−${-r}" else "$r", unit)
+}
+
+@Composable
+private fun Modifier.vuSemantics(level: ChannelLevel, spoken: String): Modifier {
+    val name = stringResource(R.string.a11y_vu_meter, spoken)
+    val state = spokenDb(level.rmsDb - VU_REFERENCE_DBFS, "VU").takeIf { level.rmsDb > LevelMeter.FLOOR_DB } ?: stringResource(R.string.a11y_silence)
+    return clearAndSetSemantics {
+        contentDescription = name
+        stateDescription = state
     }
 }
 

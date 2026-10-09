@@ -1,5 +1,6 @@
 package com.gabrielifrim.brut.ui.library
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -317,7 +318,7 @@ fun PlaybackRow(take: Take, player: PlayerState, enabled: Boolean, actions: Libr
         Row(
             Modifier
                 .clip(RoundedCornerShape(4.dp))
-                .clickable(role = Role.Switch) { actions.setLoop(!player.loop) }
+                .toggleable(value = player.loop, role = Role.Switch, onValueChange = actions::setLoop)
                 .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

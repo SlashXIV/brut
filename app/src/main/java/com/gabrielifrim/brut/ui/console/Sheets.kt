@@ -1,5 +1,6 @@
 package com.gabrielifrim.brut.ui.console
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -144,7 +145,7 @@ fun FormatSheet(
             AudioFormatSpec.SUPPORTED_SAMPLE_RATES.any { !device.supportsRate(it) } || !device.supportsChannels(2)
         )
         if (anyForeign) {
-            Text(stringResource(R.string.format_not_native), style = BrutType.Body, color = BrutColors.CreamFaint, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.format_not_native), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 8.dp))
         }
         if (format.channels == 2 && device != null && !device.supportsChannels(2)) {
             Text(stringResource(R.string.warning_mono_input), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
@@ -444,7 +445,7 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .background(BrutColors.Recess)
-            .clickable(enabled = !locked, role = Role.Switch) { onOptions(options.copy(monitor = !options.monitor)) }
+            .toggleable(value = options.monitor, enabled = !locked, role = Role.Switch) { onOptions(options.copy(monitor = it)) }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

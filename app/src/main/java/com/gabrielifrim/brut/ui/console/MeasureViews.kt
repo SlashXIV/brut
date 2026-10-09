@@ -24,6 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -49,14 +52,15 @@ private fun lufsText(value: Float): String =
 fun LufsPanel(loudness: LoudnessReading, onReset: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Spacer(Modifier.weight(1f))
-        LufsRow(stringResource(R.string.lufs_momentary), lufsText(loudness.momentary), "LUFS", BrutColors.Cream)
-        LufsRow(stringResource(R.string.lufs_short), lufsText(loudness.shortTerm), "LUFS", BrutColors.Cream)
-        LufsRow(stringResource(R.string.lufs_integrated), lufsText(loudness.integrated), "LUFS", BrutColors.Amber, big = true)
+        LufsRow(stringResource(R.string.lufs_momentary), loudness.momentary, "LUFS", BrutColors.Cream)
+        LufsRow(stringResource(R.string.lufs_short), loudness.shortTerm, "LUFS", BrutColors.Cream)
+        LufsRow(stringResource(R.string.lufs_integrated), loudness.integrated, "LUFS", BrutColors.Amber, big = true)
         LufsRow(
-            stringResource(R.string.lufs_true_peak), lufsText(loudness.truePeakMax), "dBTP",
+            stringResource(R.string.lufs_true_peak), loudness.truePeakMax, "dBTP",
             if (loudness.truePeakMax > -1f) BrutColors.Red else BrutColors.Cream,
         )
-        LoudnessBar(loudness.shortTerm, Modifier.fillMaxWidth().height(58.dp))
+        // Les cibles se lisent déjà dans les valeurs : la barre est un repère visuel.
+        LoudnessBar(loudness.shortTerm, Modifier.fillMaxWidth().height(58.dp).clearAndSetSemantics {})
         Spacer(Modifier.weight(1f))
         Text(
             stringResource(R.string.lufs_reset).uppercase(),
@@ -73,8 +77,14 @@ fun LufsPanel(loudness: LoudnessReading, onReset: () -> Unit, modifier: Modifier
 }
 
 @Composable
-private fun LufsRow(label: String, value: String, unit: String, color: Color, big: Boolean = false) {
-    Row(verticalAlignment = Alignment.Bottom) {
+private fun LufsRow(label: String, reading: Float, unit: String, color: Color, big: Boolean = false) {
+    val value = lufsText(reading)
+    val spoken = if (reading <= LoudnessReading.SILENCE) {
+        stringResource(R.string.a11y_no_reading)
+    } else {
+        stringResource(R.string.a11y_db, formatDb(reading, signed = true) ?: value, unit)
+    }
+    Row(Modifier.clearAndSetSemantics { contentDescription = "$label : $spoken" }, verticalAlignment = Alignment.Bottom) {
         Text(label.uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim, modifier = Modifier.weight(1f))
         Text(
             value,
@@ -130,7 +140,22 @@ fun SpectrumView(levels: FloatArray?, centers: FloatArray, modifier: Modifier = 
         for (i in held.indices) held[i] = max(levels[i], held[i] - 2.5f)
     }
     val style = BrutType.ReadoutSmall.copy(color = BrutColors.CreamDim)
-    Canvas(modifier.fillMaxSize()) {
+    // Pour TalkBack, le spectre se résume à sa bande la plus forte.
+    val name = stringResource(R.string.a11y_spectrum)
+    val loudest = held.indices.maxByOrNull { held[it] }
+    val state = if (loudest == null || held[loudest] <= -90f) {
+        stringResource(R.string.a11y_silence)
+    } else {
+        val f = centers[loudest]
+        val freq = if (f >= 1000f) stringResource(R.string.a11y_khz, formatDb(f / 1000f) ?: "") else stringResource(R.string.a11y_hz, f.toInt())
+        stringResource(R.string.a11y_spectrum_peak, freq, spokenDb(held[loudest]))
+    }
+    Canvas(
+        modifier.fillMaxSize().clearAndSetSemantics {
+            contentDescription = name
+            stateDescription = state
+        },
+    ) {
         val labelH = 16.dp.toPx()
         val h = size.height - labelH
         val fMin = 20.0

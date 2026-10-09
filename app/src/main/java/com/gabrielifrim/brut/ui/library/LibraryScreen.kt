@@ -51,7 +51,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -235,7 +237,7 @@ private fun SearchAndSort(state: LibraryState, actions: LibraryActions) {
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             if (state.query.isEmpty()) {
-                Text(stringResource(R.string.library_search), style = BrutType.Readout, color = BrutColors.CreamFaint)
+                Text(stringResource(R.string.library_search), style = BrutType.Readout, color = BrutColors.CreamDim)
             }
             BasicTextField(
                 value = state.query,
@@ -265,7 +267,7 @@ private fun SearchAndSort(state: LibraryState, actions: LibraryActions) {
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.library_sort).uppercase() + " ", style = BrutType.Legend, color = BrutColors.CreamFaint)
+            Text(stringResource(R.string.library_sort).uppercase() + " ", style = BrutType.Legend, color = BrutColors.CreamDim)
             Text(labels.getValue(state.sort).uppercase(), style = BrutType.Legend, color = BrutColors.Amber)
         }
     }
@@ -589,6 +591,7 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(BrutColors.PanelRaised)
+                .semantics { liveRegion = LiveRegionMode.Polite }
                 .drawBehind { drawRect(if (m is LibraryMessage.Failed || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

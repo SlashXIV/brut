@@ -26,7 +26,9 @@ object BrutColors {
     val Edge = Color(0xFF3A332B)
     val Cream = Color(0xFFEFE6D6)
     val CreamDim = Color(0xFF9C9284)
-    val CreamFaint = Color(0xFF5E574E)
+    // 3,9:1 sur graphite : assez pour les gros chiffres et les graduations ; le petit texte
+    // informatif prend CreamDim (6:1). Le reste sert aux états désactivés.
+    val CreamFaint = Color(0xFF7A7266)
     val Amber = Color(0xFFFFB238)
     val Green = Color(0xFF9BC53D)
     val Red = Color(0xFFFF4B3E)

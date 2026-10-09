@@ -266,4 +266,39 @@
     <string name="shortcut_record_long">Lancer une prise</string>
     <string name="shortcut_library_short">Prises</string>
     <string name="shortcut_library_long">Ouvrir les prises</string>
+    <!-- Accessibilité (TalkBack) -->
+    <string name="a11y_channel_left">voie gauche</string>
+    <string name="a11y_channel_right">voie droite</string>
+    <string name="a11y_channel_mono">mono</string>
+    <string name="a11y_db">%1$s %2$s</string>
+    <string name="a11y_silence">silence</string>
+    <string name="a11y_no_reading">pas encore de mesure</string>
+    <string name="a11y_levels">Niveaux %1$s : crête %2$s, RMS %3$s, maximum %4$s</string>
+    <string name="a11y_peak_meter">Crête-mètre %1$s</string>
+    <string name="a11y_vu_meter">Vu-mètre %1$s</string>
+    <string name="a11y_clip">Voyant de saturation, %1$s</string>
+    <string name="a11y_clip_off">éteint</string>
+    <string name="a11y_clip_file">allumé : le fichier sature</string>
+    <string name="a11y_clip_input">allumé : l’entrée sature avant le gain, baisser le niveau à la source</string>
+    <string name="a11y_meter_mode">Affichage de mesure</string>
+    <string name="a11y_switch_to">passer à %1$s</string>
+    <string name="a11y_spectrum">Analyseur de spectre</string>
+    <string name="a11y_spectrum_peak">bande la plus forte vers %1$s, %2$s</string>
+    <string name="a11y_hz" tools:ignore="PluralsCandidate">%1$d hertz</string>
+    <string name="a11y_khz">%1$s kilohertz</string>
+    <string name="a11y_clock">Durée de la prise : %1$s</string>
+    <string name="a11y_clock_idle">Aucune prise en cours</string>
+    <string name="a11y_open_library">Ouvrir les prises</string>
+    <plurals name="a11y_hours">
+        <item quantity="one">%d heure</item>
+        <item quantity="other">%d heures</item>
+    </plurals>
+    <plurals name="a11y_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="a11y_seconds">
+        <item quantity="one">%d seconde</item>
+        <item quantity="other">%d secondes</item>
+    </plurals>
 </resources>

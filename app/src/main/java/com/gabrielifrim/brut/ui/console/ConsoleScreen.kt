@@ -37,7 +37,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -57,6 +62,7 @@ import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatLongDuration
 import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.spokenDuration
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlinx.coroutines.delay
@@ -212,6 +218,7 @@ private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> 
             Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Amber))
         }
         Spacer(Modifier.width(10.dp))
+        val libraryLabel = stringResource(R.string.a11y_open_library)
         Text(
             stringResource(R.string.library_open).uppercase() + " \u203A",
             style = engraved(BrutType.Legend),
@@ -221,6 +228,7 @@ private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> 
                 .clip(RoundedCornerShape(4.dp))
                 .background(BrutColors.Panel)
                 .clickable(role = Role.Button, onClick = onLibrary)
+                .semantics { contentDescription = libraryLabel }
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         )
         Spacer(Modifier.weight(1f))
@@ -234,7 +242,7 @@ private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> 
         val channels = stringResource(if (f.channels == 2) R.string.format_short_stereo else R.string.format_short_mono)
         Readout(
             "${formatRate(f.sampleRate)} · $depth BIT · $channels",
-            Modifier.clickable(role = Role.Button, onClick = onFormat),
+            Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.take_settings_title), onClick = onFormat),
         )
     }
 }
@@ -264,7 +272,7 @@ private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.source_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
-                    Text("  →  ", style = BrutType.Legend, color = BrutColors.CreamFaint)
+                    Text("  →  ", style = BrutType.Legend, color = BrutColors.CreamFaint, modifier = Modifier.clearAndSetSemantics {})
                     Text(
                         (device?.let { kindLabel(it.kind) } ?: stringResource(R.string.source_none)).uppercase(),
                         style = engraved(BrutType.Legend), color = BrutColors.Amber,
@@ -280,7 +288,7 @@ private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Lamp(lampColor)
-                Text("›", style = BrutType.Title, color = BrutColors.CreamDim)
+                Text("›", style = BrutType.Title, color = BrutColors.CreamDim, modifier = Modifier.clearAndSetSemantics {})
             }
         }
     }
@@ -335,6 +343,7 @@ private fun Warnings(state: RecorderState) {
                 .padding(top = 8.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
                 .background(BrutColors.Amber.copy(alpha = 0.10f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -389,7 +398,9 @@ private fun ToolsSummary(state: RecorderState) {
         color = BrutColors.Amber,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(bottom = 4.dp),
+        modifier = Modifier
+            .padding(bottom = 4.dp)
+            .clearAndSetSemantics { contentDescription = parts.joinToString(", ") },
     )
 }
 
@@ -405,8 +416,10 @@ private fun Clock(seconds: Double, recording: Boolean) {
         append(full.substring(0, cut))
         withStyle(SpanStyle(fontSize = 0.55.em)) { append(full.substring(cut)) }
     }
+    val spoken = if (recording) stringResource(R.string.a11y_clock, spokenDuration(seconds)) else stringResource(R.string.a11y_clock_idle)
     BasicText(
         text,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
         style = BrutType.Clock.copy(color = if (recording) BrutColors.Cream else BrutColors.CreamFaint),
         maxLines = 1,
         softWrap = false,
@@ -462,6 +475,7 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(BrutColors.PanelRaised)
+                .semantics { liveRegion = LiveRegionMode.Polite }
                 .clickable(onClick = onDone)
                 .drawBehind { drawRect(accent, Offset.Zero, size.copy(width = 4.dp.toPx())) }
                 .padding(horizontal = 18.dp, vertical = 14.dp),

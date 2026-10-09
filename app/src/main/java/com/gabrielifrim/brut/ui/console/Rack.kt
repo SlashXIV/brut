@@ -1,5 +1,6 @@
 package com.gabrielifrim.brut.ui.console
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
@@ -188,7 +189,7 @@ fun <T> RotarySelector(
                         !enabled -> BrutColors.CreamFaint
                         active -> if (isNative(option)) BrutColors.Amber else BrutColors.Amber.copy(alpha = 0.55f)
                         isNative(option) -> BrutColors.CreamDim
-                        else -> BrutColors.CreamFaint.copy(alpha = 0.6f)
+                        else -> BrutColors.CreamFaint
                     },
                     modifier = Modifier
                         .width(w)
@@ -268,7 +269,8 @@ fun StatusTag(text: String, color: Color, modifier: Modifier = Modifier) {
         style = engraved(BrutType.Legend),
         color = color,
         maxLines = 1,
-        modifier = modifier,
+        // Le triangle est un ornement gravé : TalkBack ne lit que le mot.
+        modifier = modifier.clearAndSetSemantics { contentDescription = text },
     )
 }
 
