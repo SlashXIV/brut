@@ -20,6 +20,8 @@ data class ExportSpec(
     /** null = résolution d'origine (copie à l'octet près). */
     val bitDepth: BitDepth? = null,
     val channels: ChannelPick = ChannelPick.ALL,
+    /** null = fréquence d'origine. Une autre fréquence passe par le [Resampler]. */
+    val sampleRate: Int? = null,
 ) {
     val frames: Long get() = endFrame - startFrame
 }
@@ -34,8 +36,9 @@ data class ExportResult(val frames: Long, val clippedSamples: Long)
  *
  * Une conversion de résolution est un choix explicite. Elle se fait sans tramage, comme
  * l'enregistrement : vers une résolution plus haute elle est exacte, vers 16 bit elle
- * arrondit. Il n'y a volontairement pas de changement de fréquence : ce serait un
- * rééchantillonnage, donc un traitement du son.
+ * arrondit. Un changement de fréquence est, lui, un vrai traitement (filtre sinc du
+ * [Resampler]) : proposé pour la livraison, jamais par défaut, et noté dans l'historique
+ * de codage du fichier.
  */
 object WavExport {
 
@@ -52,12 +55,16 @@ object WavExport {
     fun targetFormat(info: WavInfo, spec: ExportSpec): AudioFormatSpec {
         val depth = spec.bitDepth ?: sourceDepth(info) ?: throw IOException("Résolution d'origine impossible à recopier")
         val channels = if (spec.channels == ChannelPick.ALL) info.channels else 1
-        return AudioFormatSpec(info.sampleRate, depth, channels)
+        return AudioFormatSpec(spec.sampleRate ?: info.sampleRate, depth, channels)
     }
+
+    /** Vrai si l'export change la fréquence d'échantillonnage. */
+    fun resamples(info: WavInfo, spec: ExportSpec): Boolean =
+        spec.sampleRate != null && spec.sampleRate != info.sampleRate
 
     /** Vrai si l'export recopie les octets sans les décoder. */
     fun isBitExact(info: WavInfo, spec: ExportSpec): Boolean =
-        spec.bitDepth == null || spec.bitDepth == sourceDepth(info)
+        (spec.bitDepth == null || spec.bitDepth == sourceDepth(info)) && !resamples(info, spec)
 
     /**
      * Intervalles délimités par les repères compris dans [start, end[ : un repère ouvre
@@ -80,12 +87,15 @@ object WavExport {
     fun derivedBext(source: Bext, info: WavInfo, spec: ExportSpec, target: AudioFormatSpec, name: String, tool: String, description: String): Bext {
         val offsetNanos = (spec.startFrame.toDouble() * 1_000_000_000.0 / info.sampleRate).roundToLong()
         val history = source.codingHistory.let { if (it.isEmpty() || it.endsWith("\r\n")) it else "$it\r\n" }
+        val ratio = target.sampleRate.toDouble() / info.sampleRate
+        // La référence horaire se compte en échantillons : elle change d'unité avec la fréquence.
+        val timeReference = ((source.timeReference + spec.startFrame) * ratio).roundToLong()
         return source.copy(
             description = description,
             originatorReference = name,
             date = source.date.plusNanos(offsetNanos).withNano(0),
-            timeReference = source.timeReference + spec.startFrame,
-            codingHistory = history + Bext.codingHistoryFor(target, tool),
+            timeReference = timeReference,
+            codingHistory = history + Bext.codingHistoryFor(target, if (resamples(info, spec)) "$tool; SRC sinc" else tool),
         )
     }
 
@@ -115,12 +125,22 @@ object WavExport {
         val raw = ByteBuffer.allocate(BLOCK_FRAMES * info.blockAlign)
         val samples = FloatArray(BLOCK_FRAMES * info.channels)
         val picked = FloatArray(BLOCK_FRAMES * target.channels)
-        val out = ByteArray(BLOCK_FRAMES * target.bytesPerFrame)
+        var out = ByteArray(BLOCK_FRAMES * target.bytesPerFrame)
+        val resampler = if (resamples(info, spec)) Resampler(info.sampleRate, target.sampleRate, target.channels) else null
         var clipped = 0L
         var frame = spec.startFrame
         var blocks = 0
+        var written = 0L
         WavWriter(output, target, extraChunks).use { writer ->
-            markers.forEach { writer.addMarker(it.label, it.frame) }
+            fun writeFloats(data: FloatArray, count: Int) {
+                if (count == 0) return
+                val bytes = count * target.bitDepth.bytesPerSample
+                if (bytes > out.size) out = ByteArray(bytes)
+                clipped += countClipped(data, count, target.bitDepth)
+                writer.write(out, SampleConverter.encode(data, count, target.bitDepth, out))
+            }
+            val scale = target.sampleRate.toDouble() / info.sampleRate
+            markers.forEach { writer.addMarker(it.label, (it.frame * scale).roundToLong()) }
             while (frame < spec.endFrame) {
                 if (!isActive()) throw CancellationException("Export annulé")
                 val n = minOf(BLOCK_FRAMES.toLong(), spec.endFrame - frame).toInt()
@@ -148,16 +168,22 @@ object WavExport {
                         for (f in 0 until read) picked[f] = samples[f * 2 + pick]
                         read
                     }
-                    clipped += countClipped(picked, count, target.bitDepth)
-                    writer.write(out, SampleConverter.encode(picked, count, target.bitDepth, out))
+                    if (resampler != null) {
+                        val r = resampler.process(picked, count / target.channels)
+                        writeFloats(r, r.size)
+                    } else {
+                        writeFloats(picked, count)
+                    }
                     frame += read
                 }
                 // Comme à l'enregistrement : un export interrompu reste lisible.
                 if (++blocks % 64 == 0) writer.updateHeader()
                 onProgress(((frame - spec.startFrame).toFloat() / spec.frames.coerceAtLeast(1)).coerceIn(0f, 1f))
             }
+            resampler?.flush()?.let { writeFloats(it, it.size) }
+            written = writer.framesWritten
         }
-        return ExportResult(frame - spec.startFrame, clipped)
+        return ExportResult(written, clipped)
     }
 
     /** Échantillons que le convertisseur ramènera à la pleine échelle entière. */

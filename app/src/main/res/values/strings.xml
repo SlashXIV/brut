@@ -211,9 +211,12 @@
     <string name="export_right">D</string>
     <string name="export_hint_exact">Résolution d’origine : la sélection est recopiée à l’octet près.</string>
     <string name="export_hint_convert">Conversion en %1$s, sans tramage.</string>
-    <string name="export_hint_clip">La prise est en flottant : ses crêtes au-delà de 0 dBFS seront écrêtées.</string>
+    <string name="export_hint_clip">Les crêtes au-delà de 0 dBFS (prise en flottant, ou nées du filtrage) seront écrêtées et comptées.</string>
+    <string name="export_rate">FRÉQUENCE</string>
+    <string name="export_hint_resample">Rééchantillonnage à %1$s : c’est un traitement (filtre sinc, bande passante jusqu’à 20 kHz). À réserver à la livraison.</string>
+    <string name="export_note_resampled">Rééchantillonné à %1$s (filtre sinc).</string>
     <string name="export_hint_channel">Voie %1$s seule, ses échantillons recopiés tels quels.</string>
-    <string name="export_hint_original">L’original n’est jamais modifié ; la fréquence d’échantillonnage reste celle de la prise.</string>
+    <string name="export_hint_original">L’original n’est jamais modifié : l’export crée un nouveau fichier.</string>
     <string name="export_selection">Exporter la sélection</string>
     <string name="export_split">Découper aux repères · %1$d</string>
     <string name="export_close">Fermer</string>

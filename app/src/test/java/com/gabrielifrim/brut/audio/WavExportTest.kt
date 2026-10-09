@@ -160,6 +160,26 @@ class WavExportTest {
     }
 
     @Test
+    fun `export à 44,1 kHz, longueur, repères et horodatage suivent la fréquence`() {
+        val format = AudioFormatSpec(48_000, BitDepth.PCM_24, 2)
+        val source = write(format, ramp(96_000, 2), listOf(Marker(72_000, "Refrain")))
+        val i = info(source)
+        val spec = ExportSpec(24_000, 96_000, sampleRate = 44_100)
+        assertThat(WavExport.isBitExact(i, spec)).isFalse()
+        val target = WavExport.targetFormat(i, spec)
+        val derived = WavExport.derivedBext(i.bext!!, i, spec, target, "Extrait", "Brut 0.9.0", "test")
+        assertThat(derived.timeReference).isEqualTo((bext.timeReference + 24_000) * 44_100 / 48_000)
+        assertThat(derived.codingHistory).endsWith("F=44100,W=24,M=stereo,T=Brut 0.9.0; SRC sinc\r\n")
+
+        val (out, result) = export(source, spec, WavExport.markersIn(i, spec.startFrame, spec.endFrame))
+        val o = info(out)
+        assertThat(o.sampleRate).isEqualTo(44_100)
+        assertThat(result.frames).isEqualTo(66_150) // 1,5 s
+        assertThat(o.frames).isEqualTo(66_150)
+        assertThat(o.markers).containsExactly(Marker(44_100, "Refrain")) // 48 000 trames après le début = 1 s
+    }
+
+    @Test
     fun `bext translittère la typographie française plutôt que d'écrire des points d'interrogation`() {
         assertThat(Bext.ascii("Extrait de « Prise », 00:01 → 00:02 ; l’entrée −6 dB"))
             .isEqualTo("Extrait de \" Prise \", 00:01 -> 00:02 ; l'entree -6 dB")

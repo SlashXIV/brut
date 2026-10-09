@@ -24,6 +24,9 @@ import com.gabrielifrim.brut.audio.WavExport
 import com.gabrielifrim.brut.audio.WavInfo
 import com.gabrielifrim.brut.storage.RecordingStorage
 import com.gabrielifrim.brut.ui.formatDuration
+import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.formatRate
 import java.io.IOException
 import java.text.Normalizer
 
@@ -199,7 +202,7 @@ class LibraryController(private val context: Context, customFolder: () -> androi
      * Exporte la sélection (ou, avec [split], chaque morceau délimité par les repères)
      * dans de nouveaux fichiers, rangés dans le dossier des prises. L'original n'est pas touché.
      */
-    fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, split: Boolean) {
+    fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, sampleRate: Int?, split: Boolean) {
         val info = take.info ?: return
         if (_state.value.exportProgress != null) return
         val trim = _state.value.trim?.takeIf { it.takeKey == take.key } ?: TrimState(take.key, 0, info.frames)
@@ -208,7 +211,7 @@ class LibraryController(private val context: Context, customFolder: () -> androi
         val job = scope.launch {
             val outcome = withContext(Dispatchers.IO) {
                 val self = coroutineContext[Job]
-                runCatching { writeExports(take, info, trim, bitDepth, channels, split) { self?.isActive != false } }
+                runCatching { writeExports(take, info, trim, bitDepth, channels, sampleRate, split) { self?.isActive != false } }
             }
             val message = outcome.fold(
                 onSuccess = { (names, clipped) -> LibraryMessage.Exported(if (names.size == 1) names[0] else "", names.size, clipped) },
@@ -234,6 +237,7 @@ class LibraryController(private val context: Context, customFolder: () -> androi
         trim: TrimState,
         bitDepth: BitDepth?,
         channels: ChannelPick,
+        sampleRate: Int?,
         split: Boolean,
         isActive: () -> Boolean,
     ): Pair<List<String>, Long> {
@@ -244,7 +248,7 @@ class LibraryController(private val context: Context, customFolder: () -> androi
         var clipped = 0L
         var shown = -1
         ranges.forEachIndexed { k, range ->
-            val spec = ExportSpec(range.first, range.last + 1, bitDepth, channels)
+            val spec = ExportSpec(range.first, range.last + 1, bitDepth, channels, sampleRate)
             val target = WavExport.targetFormat(info, spec)
             val suffix = if (split) context.getString(R.string.export_suffix_part) + (k + 1) else context.getString(R.string.export_suffix_extract)
             val file = storage.createNamed(TakeRepository.sanitize("${take.baseName}_$suffix"))
@@ -287,7 +291,10 @@ class LibraryController(private val context: Context, customFolder: () -> androi
         }
         val origin = buildList {
             add(context.getString(R.string.export_note, take.baseName, formatDuration(spec.startFrame / rate), formatDuration(spec.endFrame / rate)))
-            if (!WavExport.isBitExact(info, spec)) add(context.getString(R.string.export_note_convert, depthName(context, target.bitDepth)))
+            if (WavExport.resamples(info, spec)) add(context.getString(R.string.export_note_resampled, formatRate(target.sampleRate)))
+            if (!WavExport.isBitExact(info, spec) && target.bitDepth != WavExport.sourceDepth(info)) {
+                add(context.getString(R.string.export_note_convert, depthName(context, target.bitDepth)))
+            }
             channelName?.let { add(context.getString(R.string.export_note_channel, it.lowercase())) }
         }.joinToString(" ")
         val note = listOfNotNull(origin, info.description).joinToString("\n")

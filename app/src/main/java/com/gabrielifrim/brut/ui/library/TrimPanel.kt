@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
+import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.ChannelPick
 import com.gabrielifrim.brut.audio.ExportSpec
@@ -57,6 +58,7 @@ import com.gabrielifrim.brut.ui.console.RotarySelector
 import com.gabrielifrim.brut.ui.console.engraved
 import com.gabrielifrim.brut.ui.console.meterPosition
 import com.gabrielifrim.brut.ui.formatDuration
+import com.gabrielifrim.brut.ui.formatRate
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlin.math.abs
@@ -222,10 +224,14 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
     val depthChoices: List<BitDepth?> = (if (source != null) listOf(null) else emptyList()) + BitDepth.entries
     var depthIndex by rememberSaveable(take.key) { mutableIntStateOf(0) }
     var channelIndex by rememberSaveable(take.key) { mutableIntStateOf(0) }
+    var rateIndex by rememberSaveable(take.key) { mutableIntStateOf(0) }
+    // La fréquence de la prise n'est pas un choix : c'est « ORIG. ».
+    val rateChoices: List<Int?> = listOf<Int?>(null) + AudioFormatSpec.SUPPORTED_SAMPLE_RATES.filter { it != info.sampleRate }
+    val rate = rateChoices[rateIndex.coerceIn(0, rateChoices.lastIndex)]
     val depth = depthChoices[depthIndex.coerceIn(0, depthChoices.lastIndex)]
     val channelChoices = if (info.channels == 2) ChannelPick.entries else listOf(ChannelPick.ALL)
     val channels = channelChoices[channelIndex.coerceIn(0, channelChoices.lastIndex)]
-    val spec = ExportSpec(trim.start, trim.end, depth, channels)
+    val spec = ExportSpec(trim.start, trim.end, depth, channels, rate)
     val segments = remember(info, trim.start, trim.end) { WavExport.segments(info, trim.start, trim.end).size }
     val busy = exportProgress != null
     val enabled = !busy && !recording
@@ -247,7 +253,16 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
                 },
                 onSelect = { depthIndex = depthChoices.indexOf(it) },
                 enabled = enabled,
-                knobSize = 44.dp,
+                knobSize = 40.dp,
+            )
+            RotarySelector(
+                legend = stringResource(R.string.export_rate),
+                options = rateChoices,
+                selected = rate,
+                label = { r -> r?.let { formatRate(it).removeSuffix(" kHz") } ?: original },
+                onSelect = { rateIndex = rateChoices.indexOf(it) },
+                enabled = enabled,
+                knobSize = 40.dp,
             )
             if (info.channels == 2) {
                 val labels = mapOf(
@@ -262,17 +277,21 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
                     label = { labels.getValue(it) },
                     onSelect = { channelIndex = channelChoices.indexOf(it) },
                     enabled = enabled,
-                    knobSize = 44.dp,
+                    knobSize = 40.dp,
                 )
             }
         }
     }
     val hints = buildList {
+        val target = WavExport.targetFormat(info, spec)
         if (WavExport.isBitExact(info, spec)) {
             add(stringResource(R.string.export_hint_exact))
         } else {
-            add(stringResource(R.string.export_hint_convert, depthName(context, WavExport.targetFormat(info, spec).bitDepth)))
-            if (info.isFloat && depth?.isFloat == false) add(stringResource(R.string.export_hint_clip))
+            if (WavExport.resamples(info, spec)) add(stringResource(R.string.export_hint_resample, formatRate(target.sampleRate)))
+            if (target.bitDepth != WavExport.sourceDepth(info)) {
+                add(stringResource(R.string.export_hint_convert, depthName(context, target.bitDepth)))
+            }
+            if (!target.bitDepth.isFloat && (info.isFloat || WavExport.resamples(info, spec))) add(stringResource(R.string.export_hint_clip))
         }
         if (channels != ChannelPick.ALL) {
             val name = stringResource(if (channels == ChannelPick.LEFT) R.string.channel_left_name else R.string.channel_right_name)
@@ -298,11 +317,11 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
     } else {
         // L'un sous l'autre : les libellés restent entiers sur les écrans étroits.
         ActionButton(stringResource(R.string.export_selection), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = enabled) {
-            actions.export(take, depth, channels, split = false)
+            actions.export(take, depth, channels, rate, split = false)
         }
         if (segments > 1) {
             ActionButton(stringResource(R.string.export_split, segments), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = enabled) {
-                actions.export(take, depth, channels, split = true)
+                actions.export(take, depth, channels, rate, split = true)
             }
         }
         ActionButton(stringResource(R.string.export_close), BrutColors.CreamDim, Modifier.fillMaxWidth(), onClick = actions::endTrim)

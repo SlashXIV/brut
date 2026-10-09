@@ -211,9 +211,12 @@
     <string name="export_right">R</string>
     <string name="export_hint_exact">Original bit depth: the selection is copied byte for byte.</string>
     <string name="export_hint_convert">Converted to %1$s, without dither.</string>
-    <string name="export_hint_clip">The take is floating point: its peaks above 0 dBFS will be clipped.</string>
+    <string name="export_hint_clip">Peaks above 0 dBFS (floating-point take, or created by the filter) will be clipped and counted.</string>
+    <string name="export_rate">SAMPLE RATE</string>
+    <string name="export_hint_resample">Resampling to %1$s: this is processing (sinc filter, passband up to 20 kHz). Keep it for delivery.</string>
+    <string name="export_note_resampled">Resampled to %1$s (sinc filter).</string>
     <string name="export_hint_channel">Only the %1$s channel, its samples copied as they are.</string>
-    <string name="export_hint_original">The original is never changed; the sample rate stays that of the take.</string>
+    <string name="export_hint_original">The original is never changed: export creates a new file.</string>
     <string name="export_selection">Export the selection</string>
     <string name="export_split">Split at markers · %1$d</string>
     <string name="export_close">Close</string>

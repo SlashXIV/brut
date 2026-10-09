@@ -103,7 +103,7 @@ interface LibraryActions {
     fun startTrim(take: Take)
     fun setTrim(start: Long, end: Long)
     fun endTrim()
-    fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, split: Boolean)
+    fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, sampleRate: Int?, split: Boolean)
     fun cancelExport()
 }
 

@@ -192,8 +192,8 @@ class MainActivity : ComponentActivity() {
         override fun startTrim(take: Take) = library.startTrim(take)
         override fun setTrim(start: Long, end: Long) = library.setTrim(start, end)
         override fun endTrim() = library.endTrim()
-        override fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, split: Boolean) =
-            library.export(take, bitDepth, channels, split)
+        override fun export(take: Take, bitDepth: BitDepth?, channels: ChannelPick, sampleRate: Int?, split: Boolean) =
+            library.export(take, bitDepth, channels, sampleRate, split)
         override fun cancelExport() = library.cancelExport()
     }
 
