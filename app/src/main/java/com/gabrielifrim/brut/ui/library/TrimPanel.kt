@@ -52,6 +52,7 @@ import com.gabrielifrim.brut.library.Take
 import com.gabrielifrim.brut.library.TrimState
 import com.gabrielifrim.brut.library.Waveform
 import com.gabrielifrim.brut.library.depthName
+import com.gabrielifrim.brut.ui.console.ActionButton
 import com.gabrielifrim.brut.ui.console.RackPlate
 import com.gabrielifrim.brut.ui.console.Readout
 import com.gabrielifrim.brut.ui.console.RotarySelector

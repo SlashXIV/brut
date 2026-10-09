@@ -72,6 +72,7 @@ import com.gabrielifrim.brut.library.PlayerState
 import com.gabrielifrim.brut.library.Take
 import com.gabrielifrim.brut.library.TakeSort
 import com.gabrielifrim.brut.library.Waveform
+import com.gabrielifrim.brut.ui.console.ActionButton
 import com.gabrielifrim.brut.ui.console.Lamp
 import com.gabrielifrim.brut.ui.console.chassis
 import com.gabrielifrim.brut.ui.console.recess
@@ -508,23 +509,6 @@ internal fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit)
                 drawPath(path, ink)
             }
         }
-    }
-}
-
-@Composable
-internal fun ActionButton(text: String, color: Color, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(4.dp))
-            .drawBehind {
-                drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF3B342C), Color(0xFF221E19))), cornerRadius = CornerRadius(4.dp.toPx()))
-                drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f))
-            }
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text.uppercase(), style = engraved(BrutType.Legend), color = if (enabled) color else BrutColors.CreamFaint, maxLines = 1)
     }
 }
 

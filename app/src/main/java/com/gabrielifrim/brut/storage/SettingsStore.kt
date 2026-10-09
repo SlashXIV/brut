@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
+import com.gabrielifrim.brut.audio.CaptureRecipe
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.TakeOptions
@@ -28,6 +29,8 @@ data class SavedSettings(
     /** null = automatique. */
     val captureMode: CaptureSource? = null,
     val options: TakeOptions = TakeOptions(),
+    /** Combinaisons retenues par le test des voies, par entrée (même clé que [deviceKey]). */
+    val recipes: Map<String, CaptureRecipe> = emptyMap(),
 )
 
 private val Context.dataStore by preferencesDataStore(name = "reglages")
@@ -66,6 +69,10 @@ class SettingsStore(private val context: Context) {
                 ltcChannel = p[LTC_CHANNEL]?.takeIf { it in 0 until channels },
             ),
             meterMode = p[METER]?.let { name -> MeterMode.entries.firstOrNull { it.name == name } } ?: MeterMode.PEAK,
+            recipes = p[RECIPES].orEmpty().lines().mapNotNull { line ->
+                val key = line.substringBefore('\t', "")
+                CaptureRecipe.decode(line.substringAfter('\t', "")).takeIf { key.isNotEmpty() }?.let { key to it }
+            }.toMap(),
         )
     }
 
@@ -89,6 +96,8 @@ class SettingsStore(private val context: Context) {
             p[LTC_CHANNEL] = settings.options.ltcChannel ?: -1
             settings.captureMode?.let { p[CAPTURE] = it.name } ?: p.remove(CAPTURE)
             settings.deviceKey?.let { p[DEVICE] = it } ?: p.remove(DEVICE)
+            // Une ligne par entrée : la clé contient des « | », d'où la tabulation.
+            p[RECIPES] = settings.recipes.entries.joinToString("\n") { (key, r) -> "$key\t${r.encode()}" }
         }
     }
 
@@ -111,5 +120,6 @@ class SettingsStore(private val context: Context) {
         val MONITOR = booleanPreferencesKey("ecoute_casque")
         val TC_RATE = stringPreferencesKey("tc_cadence")
         val LTC_CHANNEL = intPreferencesKey("tc_voie_ltc")
+        val RECIPES = stringPreferencesKey("recettes_voies")
     }
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +81,10 @@ data class RecorderState(
     val markerCount: Int = 0,
     /** Timecode LTC reçu à l'instant (null : aucun signal lisible). */
     val ltcReadout: String? = null,
+    /** Combinaisons retenues par le test des voies, par entrée. */
+    val recipes: Map<String, CaptureRecipe> = emptyMap(),
+    /** Test des voies en cours ou dont le résultat est affiché. */
+    val channelTest: ChannelTestState? = null,
     /** Santé du moteur (charge, tampon, pertes), relevée une fois par seconde. */
     val stats: EngineStats.Snapshot? = null,
     val message: UserMessage? = null,
@@ -96,6 +101,9 @@ data class RecorderState(
     val lowSpace: Boolean get() = isRecording && remainingSeconds < LOW_SPACE_SECONDS
 
     val selectedDevice: InputDevice? get() = devices.firstOrNull { it.id == selectedDeviceId }
+
+    /** Combinaison retenue pour l'entrée choisie ; appliquée seulement en mode automatique. */
+    val selectedRecipe: CaptureRecipe? get() = selectedDevice?.let { recipes[inputKey(it)] }
     val isRecording: Boolean get() = phase == Phase.RECORDING
     val elapsedSeconds: Double get() = framesWritten.toDouble() / format.sampleRate
 
@@ -106,6 +114,23 @@ data class RecorderState(
     val isRerouted: Boolean
         get() = capture?.routedDeviceId != null && selectedDeviceId != null && capture.routedDeviceId != selectedDeviceId
 }
+
+/** Avancement et résultats du test des voies. */
+data class ChannelTestState(
+    val deviceName: String,
+    val sampleRate: Int,
+    val running: Boolean,
+    val trial: Int,
+    val total: Int,
+    val current: CaptureRecipe?,
+    val results: List<ProbeResult>,
+) {
+    /** La plus brute des combinaisons qui gardent les voies séparées. */
+    val best: CaptureRecipe? get() = results.firstOrNull { it.outcome == ProbeOutcome.SEPARATED }?.recipe
+}
+
+/** Identifie une entrée d'un branchement à l'autre : l'identifiant Android, lui, change. */
+fun inputKey(d: InputDevice) = "${d.kind}|${d.productName}|${d.address}"
 
 /**
  * Chef d'orchestre : choix de l'entrée, format, gain, écoute des niveaux et prises.
@@ -165,6 +190,7 @@ class RecorderController(private val context: Context) {
                 meterMode = saved.meterMode,
                 captureMode = saved.captureMode,
                 options = saved.options,
+                recipes = saved.recipes,
                 unprocessedSupported = supportsUnprocessed(audioManager),
                 devices = devices,
                 selectedDeviceId = device?.id,
@@ -230,7 +256,7 @@ class RecorderController(private val context: Context) {
         }
     }
 
-    private fun keyOf(d: InputDevice) = "${d.kind}|${d.productName}|${d.address}"
+    private fun keyOf(d: InputDevice) = inputKey(d)
 
     /** Enregistre les réglages, regroupés : un fader qu'on glisse n'écrit qu'une fois. */
     private fun persist() {
@@ -239,7 +265,7 @@ class RecorderController(private val context: Context) {
             delay(400)
             val s = _state.value
             withContext(Dispatchers.IO) {
-                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode, s.captureMode, s.options))
+                settings.save(SavedSettings(s.format, s.gainDb, s.gainLinked, s.selectedDevice?.let(::keyOf), s.meterMode, s.captureMode, s.options, s.recipes))
             }
         }
     }
@@ -248,7 +274,7 @@ class RecorderController(private val context: Context) {
 
     fun startMonitoring() {
         consoleVisible = true
-        if (engine != null) return
+        if (engine != null || testJob != null) return
         openEngine()
     }
 
@@ -299,6 +325,69 @@ class RecorderController(private val context: Context) {
     fun setCaptureMode(mode: CaptureSource?) {
         if (_state.value.isRecording || mode == _state.value.captureMode) return
         _state.update { it.copy(captureMode = mode) }
+        persist()
+        restartEngineIfOpen()
+    }
+
+    // --- Test des voies ----------------------------------------------------------------
+
+    private var testJob: Job? = null
+
+    /**
+     * Arrête la capture et essaie chaque façon d'ouvrir l'entrée choisie, pour trouver celle
+     * qui garde ses voies séparées. La capture normale reprend à la fin.
+     */
+    fun startChannelTest() {
+        val s = _state.value
+        if (s.isBusy || testJob != null) return
+        val device = s.selectedDevice ?: return
+        closeEngine()
+        _state.update {
+            it.copy(
+                phase = Phase.STOPPED,
+                capture = null,
+                channelTest = ChannelTestState(label(device), s.format.sampleRate, true, 0, CaptureRecipe.CANDIDATES.size, null, emptyList()),
+            )
+        }
+        testJob = scope.launch {
+            try {
+                withContext(Dispatchers.Default) {
+                    ChannelProbe(device.info, s.format.sampleRate).run(
+                        onTrial = { i, r -> _state.update { st -> st.copy(channelTest = st.channelTest?.copy(trial = i, current = r)) } },
+                        onResult = { res -> _state.update { st -> st.copy(channelTest = st.channelTest?.let { t -> t.copy(results = t.results + res) }) } },
+                        cancelled = { !isActive },
+                    )
+                }
+            } finally {
+                testJob = null
+                _state.update { it.copy(channelTest = it.channelTest?.copy(running = false, current = null)) }
+                if (consoleVisible) openEngine()
+            }
+        }
+    }
+
+    fun stopChannelTest() {
+        testJob?.cancel()
+    }
+
+    fun closeChannelTest() {
+        testJob?.cancel()
+        _state.update { it.copy(channelTest = null) }
+    }
+
+    /** Retient une combinaison pour l'entrée choisie et repasse en mode automatique pour l'appliquer. */
+    fun applyRecipe(recipe: CaptureRecipe) {
+        val device = _state.value.selectedDevice ?: return
+        if (_state.value.isRecording) return
+        _state.update { it.copy(recipes = it.recipes + (keyOf(device) to recipe), captureMode = null) }
+        persist()
+        restartEngineIfOpen()
+    }
+
+    fun forgetRecipe() {
+        val device = _state.value.selectedDevice ?: return
+        if (_state.value.isRecording) return
+        _state.update { it.copy(recipes = it.recipes - keyOf(device)) }
         persist()
         restartEngineIfOpen()
     }
@@ -362,6 +451,7 @@ class RecorderController(private val context: Context) {
     fun startRecording(): Boolean {
         val s = _state.value
         if (s.isBusy) return true
+        if (testJob != null) return false
         if (engine == null && openEngine() == null) return false
         if (s.options.trigger) {
             _state.update { it.copy(phase = Phase.ARMED, framesWritten = 0) }
@@ -526,6 +616,7 @@ class RecorderController(private val context: Context) {
         val e = RecordingEngine(
             audioManager, s.format, s.selectedDevice?.info, s.captureMode, gain,
             s.options.effectivePrerollSeconds, engineListener,
+            recipe = s.selectedRecipe.takeIf { s.captureMode == null },
         )
         return try {
             e.start()

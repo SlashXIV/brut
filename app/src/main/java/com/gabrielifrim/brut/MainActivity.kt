@@ -232,6 +232,11 @@ class MainActivity : ComponentActivity() {
             screen = Screen.LIBRARY
         }
         override fun consumeMessage() = controller.consumeMessage()
+        override fun startChannelTest() = controller.startChannelTest()
+        override fun stopChannelTest() = controller.stopChannelTest()
+        override fun closeChannelTest() = controller.closeChannelTest()
+        override fun applyRecipe(recipe: com.gabrielifrim.brut.audio.CaptureRecipe) = controller.applyRecipe(recipe)
+        override fun forgetRecipe() = controller.forgetRecipe()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

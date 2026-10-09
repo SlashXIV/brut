@@ -89,6 +89,11 @@ interface ConsoleActions {
     fun resetLoudness()
     fun resetClip()
     fun consumeMessage()
+    fun startChannelTest()
+    fun stopChannelTest()
+    fun closeChannelTest()
+    fun applyRecipe(recipe: com.gabrielifrim.brut.audio.CaptureRecipe)
+    fun forgetRecipe()
 }
 
 @Composable
@@ -96,6 +101,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     var showFormat by rememberSaveable { mutableStateOf(false) }
     var showSource by rememberSaveable { mutableStateOf(false) }
     var showEngine by rememberSaveable { mutableStateOf(false) }
+    var showTest by rememberSaveable { mutableStateOf(false) }
     val labels = when (state.format.channels) {
         1 -> listOf(stringResource(R.string.channel_mono))
         2 -> listOf(stringResource(R.string.channel_left), stringResource(R.string.channel_right))
@@ -211,6 +217,22 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             onSelect = { actions.selectDevice(it); showSource = false },
             onCaptureMode = actions::setCaptureMode,
             onDismiss = { showSource = false },
+            recipe = state.selectedRecipe,
+            canTest = state.selectedDevice?.isExternal == true,
+            onTest = { showSource = false; showTest = true },
+            onForgetRecipe = actions::forgetRecipe,
+        )
+    }
+    if (showTest || state.channelTest != null) {
+        ChannelTestSheet(
+            deviceName = state.selectedDevice?.let { deviceName(it) }.orEmpty(),
+            sampleRate = state.format.sampleRate,
+            test = state.channelTest,
+            activeRecipe = state.selectedRecipe.takeIf { state.captureMode == null },
+            onStart = actions::startChannelTest,
+            onStop = actions::stopChannelTest,
+            onUse = actions::applyRecipe,
+            onDismiss = { showTest = false; actions.closeChannelTest() },
         )
     }
     if (showEngine) {
@@ -319,9 +341,11 @@ private fun CaptureTags(state: RecorderState, onEngine: () -> Unit) {
             CaptureSource.UNPROCESSED -> stringResource(R.string.tag_raw) to BrutColors.Green
             CaptureSource.VOICE_RECOGNITION -> stringResource(R.string.tag_no_agc) to BrutColors.Cream
             CaptureSource.MIC -> stringResource(R.string.tag_standard) to BrutColors.Amber
+            CaptureSource.CAMCORDER -> stringResource(R.string.tag_camcorder) to BrutColors.Amber
         }
         StatusTag(sourceText, sourceColor)
         StatusTag(if (c.encoding == CaptureEncoding.FLOAT) "F32" else "I16", BrutColors.CreamDim)
+        if (c.indexMask && state.format.channels <= 2) StatusTag(stringResource(R.string.tag_index), BrutColors.CreamDim)
         c.deviceSampleRate?.let { StatusTag(formatRate(it).replace(" kHz", "k"), BrutColors.CreamDim) }
         if (c.activeEffects.isEmpty()) {
             StatusTag(stringResource(R.string.tag_no_fx), BrutColors.CreamDim)
@@ -368,6 +392,7 @@ private fun Warnings(state: RecorderState) {
     val warnings = buildList {
         if (state.isRerouted) add(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()))
         if (c?.silenced == true) add(stringResource(R.string.warning_silenced))
+        if (c?.channelsIdentical == true && state.selectedDevice?.isExternal == true) add(stringResource(R.string.warning_channels_identical))
         if (state.lowBattery) add(stringResource(R.string.warning_low_battery, state.batteryPercent))
         if (state.isArmed) add(stringResource(R.string.warning_armed, "−${(-state.options.triggerDb).toInt()}"))
         if (state.options.monitor && !state.headphones) add(stringResource(R.string.warning_monitor_no_headphones))

@@ -28,12 +28,44 @@ enum class CaptureSource(val androidSource: Int) {
     VOICE_RECOGNITION(MediaRecorder.AudioSource.VOICE_RECOGNITION),
     /** Dernier recours : le constructeur peut y appliquer des traitements. Signalé à l'utilisateur. */
     MIC(MediaRecorder.AudioSource.MIC),
+    /**
+     * Source « vidéo » : jamais choisie d'office. Seul le test des voies peut la retenir, quand
+     * c'est la seule qui garde séparées les voies d'une entrée sur un appareil donné.
+     */
+    CAMCORDER(MediaRecorder.AudioSource.CAMCORDER),
 }
 
 /** Encodage demandé à Android pour la capture (indépendant du format du fichier). */
 enum class CaptureEncoding(val androidEncoding: Int, val bytesPerSample: Int) {
     FLOAT(AudioFormat.ENCODING_PCM_FLOAT, 4),
     PCM_16(AudioFormat.ENCODING_PCM_16BIT, 2),
+}
+
+/**
+ * Façon d'ouvrir une entrée retenue par le test des voies : certains téléphones mélangent les
+ * voies d'une entrée USB selon la source, l'encodage ou le type de masque demandés.
+ */
+data class CaptureRecipe(val source: CaptureSource, val encoding: CaptureEncoding, val indexMask: Boolean) {
+    fun encode(): String = "${source.name},${encoding.name},${if (indexMask) "index" else "position"}"
+
+    companion object {
+        fun decode(text: String): CaptureRecipe? {
+            val parts = text.split(',')
+            if (parts.size != 3) return null
+            val source = CaptureSource.entries.firstOrNull { it.name == parts[0] } ?: return null
+            val encoding = CaptureEncoding.entries.firstOrNull { it.name == parts[1] } ?: return null
+            return CaptureRecipe(source, encoding, parts[2] == "index")
+        }
+
+        /** Tout ce que le test essaie, du plus brut au plus traité. */
+        val CANDIDATES: List<CaptureRecipe> = buildList {
+            for (s in listOf(CaptureSource.UNPROCESSED, CaptureSource.VOICE_RECOGNITION, CaptureSource.CAMCORDER, CaptureSource.MIC)) {
+                for (e in listOf(CaptureEncoding.FLOAT, CaptureEncoding.PCM_16)) {
+                    for (index in listOf(false, true)) add(CaptureRecipe(s, e, index))
+                }
+            }
+        }
+    }
 }
 
 /** Ce qu'Android a réellement mis en place : affiché tel quel, sans embellir. */
@@ -49,6 +81,10 @@ data class CaptureInfo(
     val activeEffects: List<String>,
     /** Vrai si Android a coupé le micro (autre application prioritaire, appel...). */
     val silenced: Boolean,
+    /** Voies demandées par index (1, 2…) plutôt que par position (gauche, droite). */
+    val indexMask: Boolean = false,
+    /** Les voies 1 et 2 portent le même signal : Android a mélangé l'entrée. */
+    val channelsIdentical: Boolean = false,
 )
 
 class EngineStartException(message: String) : Exception(message)
@@ -80,6 +116,8 @@ class RecordingEngine(
     /** Secondes conservées avant l'appui sur REC (0 = pas de pré-enregistrement). */
     prerollSeconds: Int,
     private val listener: Listener,
+    /** Combinaison retenue par le test des voies pour cette entrée ; essayée en premier. */
+    private val recipe: CaptureRecipe? = null,
 ) {
     interface Listener {
         fun onLevels(levels: List<ChannelLevel>, framesWritten: Long, loudness: LoudnessReading, spectrum: FloatArray?)
@@ -94,6 +132,8 @@ class RecordingEngine(
     private lateinit var record: AudioRecord
     private lateinit var encoding: CaptureEncoding
     private lateinit var source: CaptureSource
+    private var indexMask = false
+    private val twins = ChannelTwinWatch(format.channels)
     private val effects = mutableListOf<AudioEffect>()
     val meter = LevelMeter(format.sampleRate, format.channels)
     /** Sonie mesurée sur les voies 1 et 2 : la somme de pistes indépendantes ne voudrait rien dire. */
@@ -162,11 +202,16 @@ class RecordingEngine(
         } else {
             listOf(CaptureEncoding.FLOAT, CaptureEncoding.PCM_16)
         }
-        for (s in sources) for (e in encodings) {
-            val candidate = tryOpen(s, e) ?: continue
+        val attempts = buildList {
+            if (recipe != null && format.channels <= 2) add(recipe)
+            for (s in sources) for (e in encodings) add(CaptureRecipe(s, e, indexMask = false))
+        }
+        for (a in attempts) {
+            val candidate = tryOpen(a.source, a.encoding, a.indexMask) ?: continue
             record = candidate
-            source = s
-            encoding = e
+            source = a.source
+            encoding = a.encoding
+            indexMask = a.indexMask
             disableEffects(candidate.audioSessionId)
             stats = EngineStats(format.sampleRate, candidate.bufferSizeInFrames)
             running = true
@@ -177,14 +222,14 @@ class RecordingEngine(
     }
 
     @SuppressLint("MissingPermission")
-    private fun tryOpen(s: CaptureSource, e: CaptureEncoding): AudioRecord? {
+    private fun tryOpen(s: CaptureSource, e: CaptureEncoding, index: Boolean = false): AudioRecord? {
         // Au-delà de 2 voies, pas de positions (gauche, droite…) mais des index : voie 1 à N
         // telles que l'interface USB les présente, sans aucun mélange.
-        val multi = format.channels > 2
+        val multi = format.channels > 2 || index
         val positionMask = if (format.channels == 1) AudioFormat.CHANNEL_IN_MONO else AudioFormat.CHANNEL_IN_STEREO
         val stereoMin = AudioRecord.getMinBufferSize(format.sampleRate, positionMask, e.androidEncoding)
         if (stereoMin <= 0) return null
-        val minBuffer = if (multi) stereoMin / 2 * format.channels else stereoMin
+        val minBuffer = if (format.channels > 2) stereoMin / 2 * format.channels else stereoMin
         val wanted = format.sampleRate / 5 * format.channels * e.bytesPerSample // 200 ms
         val r = try {
             AudioRecord.Builder()
@@ -311,6 +356,7 @@ class RecordingEngine(
             meter.process(floats, readFrames)
             loudness.process(firstPair(floats, readFrames), readFrames)
             if (spectrumEnabled) spectrum.push(floats, readFrames)
+            twins.add(floats, readFrames)
             feedMonitor(floats, readFrames)
 
             var written = 0L
@@ -347,6 +393,7 @@ class RecordingEngine(
             sinceInfo += readFrames
             if (sinceInfo >= infoEvery) {
                 sinceInfo = 0
+                twins.conclude()
                 val info = captureInfo()
                 if (info != lastInfo) {
                     lastInfo = info
@@ -492,6 +539,8 @@ class RecordingEngine(
             deviceChannels = channels,
             activeEffects = activeEffects,
             silenced = silenced,
+            indexMask = indexMask,
+            channelsIdentical = twins.identical,
         )
     }
 }

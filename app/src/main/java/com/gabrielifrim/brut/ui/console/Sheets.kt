@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
+import com.gabrielifrim.brut.audio.CaptureRecipe
 import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.EngineStats
 import com.gabrielifrim.brut.audio.Preset
@@ -54,7 +55,7 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BrutSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun BrutSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -178,6 +179,10 @@ fun SourceSheet(
     onSelect: (Int) -> Unit,
     onCaptureMode: (CaptureSource?) -> Unit,
     onDismiss: () -> Unit,
+    recipe: CaptureRecipe? = null,
+    canTest: Boolean = false,
+    onTest: () -> Unit = {},
+    onForgetRecipe: () -> Unit = {},
 ) {
     BrutSheet(onDismiss) {
         Text(stringResource(R.string.source_pick_title), style = BrutType.Title)
@@ -202,6 +207,28 @@ fun SourceSheet(
                         onClick = { onSelect(device.id) },
                     )
                 }
+            }
+        }
+
+        // Test des voies : seulement pour une entrée externe, là où un mélange peut se cacher.
+        if (canTest || recipe != null) {
+            Spacer(Modifier.height(12.dp))
+            if (recipe != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.source_recipe, recipeLabel(recipe)), style = BrutType.Body, color = BrutColors.Green)
+                        if (captureMode != null) {
+                            Text(stringResource(R.string.source_recipe_manual), style = BrutType.Body, color = BrutColors.CreamDim)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    ActionButton(stringResource(R.string.source_recipe_forget), BrutColors.Cream, Modifier.width(96.dp), enabled = !locked, onClick = onForgetRecipe)
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (canTest) {
+                ActionButton(stringResource(R.string.source_test), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = !locked, onClick = onTest)
+                Text(stringResource(R.string.source_test_hint), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
