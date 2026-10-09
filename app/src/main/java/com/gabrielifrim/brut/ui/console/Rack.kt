@@ -27,12 +27,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -52,6 +56,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlin.math.abs
 import kotlin.math.cos
@@ -67,8 +72,53 @@ fun engraved(style: TextStyle): TextStyle = style.copy(
 )
 
 /**
- * Plaque de rack : tôle brossée, liseré, une vis à chaque coin. Le contenu est posé
- * entre les vis ; la plaque n'est pas une « carte » flottante mais un élément fixé.
+ * Façade du châssis : le fond de chaque écran. Un dégradé à peine perceptible et un
+ * vignettage sur les bords suffisent à en faire une surface, sur laquelle les plaques
+ * sont encastrées au lieu de flotter sur un aplat. Pas de texture : la façade reste plus
+ * calme que les plaques.
+ */
+fun Modifier.chassis(): Modifier = drawBehind {
+    drawRect(Brush.verticalGradient(listOf(Color(0xFF191612), Color(0xFF0F0D0B))))
+    drawRect(
+        Brush.radialGradient(
+            0.55f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.35f),
+            center = Offset(size.width / 2f, size.height * 0.4f),
+            radius = maxOf(size.width, size.height) * 0.8f,
+        ),
+    )
+}
+
+/**
+ * Creux dans la façade (pont de mesure, afficheurs en long) : même rayon que les plaques,
+ * ombre portée vers l'intérieur par l'arête du haut, lèvre claire sous l'arête du bas.
+ * À placer avant un `clip` au même rayon pour que la lèvre reste visible.
+ */
+fun Modifier.recess(fill: Color = BrutColors.Recess): Modifier = drawBehind {
+    val radius = BrutShapes.Plate.toPx()
+    val px = 1.dp.toPx()
+    // Lèvre : la façade accroche la lumière juste sous le creux.
+    drawRoundRect(
+        Color.White.copy(alpha = 0.06f), Offset(-px, 0f), Size(size.width + 2 * px, size.height + px),
+        CornerRadius(radius + px),
+    )
+    drawRoundRect(fill, cornerRadius = CornerRadius(radius))
+    clipPath(Path().apply { addRoundRect(RoundRect(size.toRect(), CornerRadius(radius))) }) {
+        drawRect(
+            Brush.verticalGradient(
+                listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent), endY = 8.dp.toPx(),
+            ),
+            size = Size(size.width, 8.dp.toPx()),
+        )
+    }
+    drawRoundRect(
+        Color.Black.copy(alpha = 0.7f), cornerRadius = CornerRadius(radius), style = Stroke(px),
+    )
+}
+
+/**
+ * Plaque de rack : tôle brossée encastrée dans la façade, une vis à chaque coin. Le contenu
+ * est posé entre les vis ; la plaque n'est pas une « carte » flottante mais un élément fixé.
  */
 @Composable
 fun RackPlate(
@@ -85,40 +135,64 @@ fun RackPlate(
 }
 
 private fun DrawScope.drawPlate() {
-    val r = CornerRadius(3.dp.toPx())
-    // Tôle : dégradé vertical léger + stries de brossage horizontales.
-    drawRoundRect(
-        Brush.verticalGradient(listOf(Color(0xFF2E2822), Color(0xFF221E19))),
-        cornerRadius = r,
-    )
-    val step = 3.dp.toPx()
-    var y = step
-    var i = 0
-    while (y < size.height) {
-        drawLine(
-            Color.White.copy(alpha = if (i % 3 == 0) 0.025f else 0.012f),
-            Offset(0f, y), Offset(size.width, y), strokeWidth = 1f,
+    val radius = BrutShapes.Plate.toPx()
+    val r = CornerRadius(radius)
+    val px = 1.dp.toPx()
+    // Ombre douce sur la façade : trois couches de plus en plus larges et pâles, décalées
+    // vers le bas (lumière d'au-dessus). Elles débordent du composant sans changer la mise en page.
+    listOf(4f to 0.07f, 2.5f to 0.12f, 1f to 0.22f).forEach { (spreadDp, alpha) ->
+        val spread = spreadDp * px
+        drawRoundRect(
+            Color.Black.copy(alpha = alpha),
+            Offset(-spread, -spread + spread * 0.8f),
+            Size(size.width + 2 * spread, size.height + 2 * spread),
+            CornerRadius(radius + spread),
         )
-        y += step
-        i++
     }
-    // Arêtes : claire en haut, sombre en bas, comme une plaque éclairée d'au-dessus.
-    drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f), 1.5f)
-    drawLine(Color.Black.copy(alpha = 0.6f), Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1.5f)
+    // Joint : la fente sombre entre la plaque et la façade.
+    drawRoundRect(Color.Black.copy(alpha = 0.6f), Offset(-px, -px), Size(size.width + 2 * px, size.height + 2 * px), CornerRadius(radius + px))
+    // Tôle : dégradé vertical léger + stries de brossage horizontales, tenues dans l'arrondi.
+    drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF2E2822), Color(0xFF221E19))), cornerRadius = r)
+    clipPath(Path().apply { addRoundRect(RoundRect(size.toRect(), r)) }) {
+        val step = 3.dp.toPx()
+        var y = step
+        var i = 0
+        while (y < size.height) {
+            drawLine(
+                Color.White.copy(alpha = if (i % 3 == 0) 0.025f else 0.012f),
+                Offset(0f, y), Offset(size.width, y), strokeWidth = 1f,
+            )
+            y += step
+            i++
+        }
+    }
+    // Arêtes : un liseré qui suit l'arrondi, clair en haut, sombre en bas, comme une plaque
+    // éclairée d'au-dessus.
+    val half = px / 2f
+    drawRoundRect(
+        Brush.verticalGradient(
+            0f to Color.White.copy(alpha = 0.10f),
+            0.3f to Color.Transparent,
+            0.7f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.5f),
+        ),
+        Offset(half, half), Size(size.width - px, size.height - px), CornerRadius(radius - half),
+        style = Stroke(px),
+    )
     val inset = 9.dp.toPx()
     listOf(
         Offset(inset, inset) to 20f,
         Offset(size.width - inset, inset) to 75f,
         Offset(inset, size.height - inset) to 130f,
         Offset(size.width - inset, size.height - inset) to 45f,
-    ).forEach { (c, angle) -> drawScrew(c, 3.6.dp.toPx(), angle) }
+    ).forEach { (c, angle) -> drawScrew(c, 3.2.dp.toPx(), angle) }
 }
 
 /** Vis cruciforme vue de face, la fente orientée au hasard comme sur un vrai rack. */
 private fun DrawScope.drawScrew(c: Offset, radius: Float, angle: Float) {
     drawCircle(Color.Black.copy(alpha = 0.55f), radius + 1.2f, c + Offset(0f, 0.8f))
     drawCircle(
-        Brush.radialGradient(listOf(Color(0xFF6B6157), Color(0xFF2F2A24)), c - Offset(radius * 0.4f, radius * 0.4f), radius * 1.6f),
+        Brush.radialGradient(listOf(Color(0xFF5C534A), Color(0xFF2A2520)), c - Offset(radius * 0.4f, radius * 0.4f), radius * 1.6f),
         radius, c,
     )
     rotate(angle, c) {

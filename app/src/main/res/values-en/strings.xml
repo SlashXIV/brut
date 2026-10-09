@@ -273,6 +273,7 @@
     <string name="a11y_channel_mono">mono</string>
     <string name="a11y_db">%1$s %2$s</string>
     <string name="a11y_silence">silence</string>
+    <string name="spectrum_idle">NO SIGNAL</string>
     <string name="a11y_no_reading">no reading yet</string>
     <string name="a11y_levels">Levels, %1$s: peak %2$s, RMS %3$s, maximum %4$s</string>
     <string name="a11y_peak_meter">Peak meter, %1$s</string>

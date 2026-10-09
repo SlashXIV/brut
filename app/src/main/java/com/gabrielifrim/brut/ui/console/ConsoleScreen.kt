@@ -64,6 +64,7 @@ import com.gabrielifrim.brut.ui.formatLongDuration
 import com.gabrielifrim.brut.ui.formatRate
 import com.gabrielifrim.brut.ui.spokenDuration
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlinx.coroutines.delay
 
@@ -98,7 +99,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(BrutColors.Graphite)
+            .chassis()
             .safeDrawingPadding(),
     ) {
         val meters = @Composable { modifier: Modifier ->
@@ -346,7 +347,7 @@ private fun Warnings(state: RecorderState) {
             Modifier
                 .padding(top = 8.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(BrutShapes.Plate))
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
                 .background(BrutColors.Amber.copy(alpha = 0.10f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -403,11 +404,13 @@ private fun LtcReadout(state: RecorderState) {
             .clearAndSetSemantics { contentDescription = spoken },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Lamp(if (tc != null) BrutColors.Green else BrutColors.Red)
+        // Sans LTC au repos, ce n'est qu'un état ; le rouge est réservé à une prise qui le perd.
+        val lost = tc == null && state.isRecording
+        Lamp(if (tc != null) BrutColors.Green else if (lost) BrutColors.Red else BrutColors.CreamFaint)
         Spacer(Modifier.width(8.dp))
         Text(stringResource(R.string.ltc_label, side), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
         Spacer(Modifier.width(8.dp))
-        Readout(tc ?: stringResource(R.string.ltc_none), color = if (tc != null) BrutColors.Amber else BrutColors.Red)
+        Readout(tc ?: stringResource(R.string.ltc_none), color = if (tc != null) BrutColors.Amber else if (lost) BrutColors.Red else BrutColors.CreamDim)
     }
 }
 
@@ -508,7 +511,7 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
                 .padding(16.dp)
                 .padding(bottom = 96.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(BrutShapes.Plate))
                 .background(BrutColors.PanelRaised)
                 .semantics { liveRegion = LiveRegionMode.Polite }
                 .clickable(onClick = onDone)

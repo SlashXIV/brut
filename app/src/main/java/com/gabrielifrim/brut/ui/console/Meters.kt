@@ -44,6 +44,7 @@ import com.gabrielifrim.brut.audio.LoudnessReading
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 
 /**
@@ -101,8 +102,8 @@ fun MeterBridge(
 ) {
     Column(
         modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(BrutColors.Recess)
+            .recess()
+            .clip(RoundedCornerShape(BrutShapes.Plate))
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         // Au-delà de 2 voies : un voyant numéroté par voie, et pas de vu-mètres à aiguille
@@ -230,6 +231,9 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit, allowVu: 
     }
 }
 
+/** Verre d'un voyant éteint : neutre, pour qu'un CLIP au repos ne se lise pas comme une alarme. */
+private val UnlitLens = Color.White.copy(alpha = 0.045f)
+
 /**
  * Voyant de saturation. Rouge : le fichier est écrêté. Ambre : c'est l'entrée
  * elle-même (le convertisseur) qui sature, avant le gain — baisser le gain n'y
@@ -254,7 +258,7 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
     Row(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(if (lit) color else color.copy(alpha = 0.10f))
+            .background(if (lit) color else UnlitLens)
             .clickable(onClick = onReset)
             // L'état est une région « vivante » : TalkBack annonce la saturation dès qu'elle survient.
             .clearAndSetSemantics {
@@ -269,7 +273,7 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
         Text(
             "$text $label",
             style = BrutType.Legend,
-            color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.45f),
+            color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.4f),
         )
     }
 }
@@ -296,7 +300,7 @@ private fun ClipStrip(levels: List<ChannelLevel>, labels: List<String>, onReset:
                     .weight(1f)
                     .height(22.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(if (lit) color else color.copy(alpha = 0.10f))
+                    .background(if (lit) color else UnlitLens)
                     .clickable(onClick = onReset)
                     .clearAndSetSemantics {
                         contentDescription = name
@@ -353,7 +357,7 @@ private fun LedBar(level: ChannelLevel, spoken: String, modifier: Modifier) {
             val base = segmentColor(db)
             val color = when {
                 lit || i == holdIndex -> base
-                else -> base.copy(alpha = 0.09f)
+                else -> base.copy(alpha = 0.07f)
             }
             drawRoundRect(color, Offset(0f, top), Size(size.width, segH), radius)
             if (lit) {

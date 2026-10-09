@@ -10,6 +10,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gabrielifrim.brut.R
 
@@ -62,6 +63,14 @@ object BrutType {
     val Readout = TextStyle(fontFamily = BrutFonts.Display, fontSize = 15.sp)
     val ReadoutSmall = TextStyle(fontFamily = BrutFonts.Display, fontSize = 12.sp)
     val Clock = TextStyle(fontFamily = BrutFonts.Display, fontSize = 52.sp, letterSpacing = (-0.5).sp)
+}
+
+/**
+ * Un seul rayon pour tout ce qui est fixé sur la façade (plaques, pont de mesure, bandeaux) :
+ * c'est ce qui fait lire l'ensemble comme une seule pièce de tôle.
+ */
+object BrutShapes {
+    val Plate = 6.dp
 }
 
 @Composable

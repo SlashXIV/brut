@@ -143,7 +143,9 @@ fun SpectrumView(levels: FloatArray?, centers: FloatArray, modifier: Modifier = 
     // Pour TalkBack, le spectre se résume à sa bande la plus forte.
     val name = stringResource(R.string.a11y_spectrum)
     val loudest = held.indices.maxByOrNull { held[it] }
-    val state = if (loudest == null || held[loudest] <= -90f) {
+    val silent = loudest == null || held[loudest] <= -90f
+    val idle = stringResource(R.string.spectrum_idle)
+    val state = if (silent) {
         stringResource(R.string.a11y_silence)
     } else {
         val f = centers[loudest]
@@ -162,7 +164,13 @@ fun SpectrumView(levels: FloatArray?, centers: FloatArray, modifier: Modifier = 
         val fMax = 20_000.0
         fun x(f: Float) = (ln(f / fMin) / ln(fMax / fMin)).toFloat().coerceIn(0f, 1f) * size.width
         fun y(db: Float) = h * (1f - ((db + 90f) / 90f).coerceIn(0f, 1f))
-        // Grille : −20, −40, −60 dBFS.
+        // Grille : 0 (plafond), −20, −40, −60 dBFS, et le plancher sur lequel posent les barres.
+        drawLine(BrutColors.CreamFaint.copy(alpha = 0.6f), Offset(0f, 0.5f), Offset(size.width, 0.5f), 1f)
+        drawLine(BrutColors.CreamFaint.copy(alpha = 0.6f), Offset(0f, h), Offset(size.width, h), 1f)
+        if (silent) {
+            val l = measurer.measure(idle, BrutType.Legend.copy(color = BrutColors.CreamFaint))
+            drawText(l, topLeft = Offset((size.width - l.size.width) / 2, h / 2 - l.size.height / 2))
+        }
         for (db in listOf(-20f, -40f, -60f)) {
             drawLine(BrutColors.CreamFaint.copy(alpha = 0.35f), Offset(0f, y(db)), Offset(size.width, y(db)), 1f)
             val l = measurer.measure("−${(-db).toInt()}", style)

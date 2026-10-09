@@ -61,6 +61,7 @@ import androidx.compose.runtime.LaunchedEffect
 import com.gabrielifrim.brut.service.RecordingService
 import com.gabrielifrim.brut.ui.console.ConsoleActions
 import com.gabrielifrim.brut.ui.console.ConsoleScreen
+import com.gabrielifrim.brut.ui.console.chassis
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutTheme
 import com.gabrielifrim.brut.ui.theme.BrutType
@@ -259,7 +260,7 @@ private fun PermissionScreen(onGrant: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(BrutColors.Graphite)
+            .chassis()
             .safeDrawingPadding()
             .padding(28.dp),
         contentAlignment = Alignment.Center,

@@ -22,7 +22,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -70,6 +73,8 @@ import com.gabrielifrim.brut.library.Take
 import com.gabrielifrim.brut.library.TakeSort
 import com.gabrielifrim.brut.library.Waveform
 import com.gabrielifrim.brut.ui.console.Lamp
+import com.gabrielifrim.brut.ui.console.chassis
+import com.gabrielifrim.brut.ui.console.recess
 import com.gabrielifrim.brut.ui.console.RackPlate
 import com.gabrielifrim.brut.ui.console.Readout
 import com.gabrielifrim.brut.ui.console.engraved
@@ -78,6 +83,7 @@ import com.gabrielifrim.brut.ui.formatBytes
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatRate
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import java.time.Instant
 import java.time.ZoneId
@@ -124,11 +130,22 @@ fun LibraryScreen(
     var renaming by remember { mutableStateOf<Take?>(null) }
     var stamping by remember { mutableStateOf<Take?>(null) }
     var deleting by remember { mutableStateOf<Take?>(null) }
+    val listState = rememberLazyListState()
+    // Une prise ouverte se déplie en plaque : si elle déborde sous l'écran, on remonte la
+    // liste juste assez pour voir ses boutons, sans perdre son en-tête.
+    LaunchedEffect(state.selectedKey) {
+        val key = state.selectedKey ?: return@LaunchedEffect
+        delay(120)
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: return@LaunchedEffect
+        val overflow = item.offset + item.size - info.viewportEndOffset
+        if (overflow > 0) listState.animateScrollBy(minOf(overflow, item.offset).toFloat())
+    }
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(BrutColors.Graphite)
+            .chassis()
             .safeDrawingPadding(),
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -157,6 +174,7 @@ fun LibraryScreen(
                 visible.isEmpty() -> Centered(stringResource(R.string.library_no_match))
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     items(visible, key = { it.key }) { take ->
@@ -297,8 +315,8 @@ private fun TakeRow(take: Take, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
-            .background(BrutColors.Recess)
+            .recess()
+            .clip(RoundedCornerShape(BrutShapes.Plate))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
