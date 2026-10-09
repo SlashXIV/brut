@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Palette « Console analogique » : à garder alignée avec ui/theme/Color.kt -->
+    <!-- Palette « Console analogique » : à garder alignée avec ui/theme/Theme.kt -->
     <color name="brut_graphite">#FF14120F</color>
     <color name="brut_amber">#FFFFB238</color>
+    <!-- Widget : dessiné par le lanceur, il ne peut pas lire les couleurs Compose. -->
+    <color name="brut_panel">#FF221E19</color>
+    <color name="brut_recess">#FF0D0C0A</color>
+    <color name="brut_edge">#FF3A332B</color>
+    <color name="brut_cream">#FFEFE6D6</color>
+    <color name="brut_cream_dim">#FF9C9284</color>
+    <color name="brut_cream_faint">#FF5E574E</color>
+    <color name="brut_red">#FFFF4B3E</color>
 </resources>

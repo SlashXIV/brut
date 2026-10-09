@@ -30,7 +30,10 @@ import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
+import com.gabrielifrim.brut.audio.Preset
 import com.gabrielifrim.brut.audio.TakeOptions
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import com.gabrielifrim.brut.ui.formatDb
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
@@ -73,6 +76,7 @@ fun FormatSheet(
     headphones: Boolean,
     onChange: (AudioFormatSpec) -> Unit,
     onOptions: (TakeOptions) -> Unit,
+    onPreset: (Preset) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BrutSheet(onDismiss) {
@@ -82,6 +86,8 @@ fun FormatSheet(
             Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
         }
 
+        Spacer(Modifier.height(16.dp))
+        PresetRow(Preset.matching(format, options), enabled = !locked, onPreset)
         Spacer(Modifier.height(16.dp))
         // Trois commutateurs à crans sur une même plaque, comme la face avant d'un enregistreur.
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
@@ -227,6 +233,70 @@ fun SourceSheet(
         }
     }
 }
+
+/**
+ * Préréglages en touches à lampe : celle qui correspond aux réglages actuels s'allume.
+ * Un réglage changé à la main éteint toutes les lampes, sans rien effacer.
+ */
+@Composable
+private fun PresetRow(active: Preset?, enabled: Boolean, onPreset: (Preset) -> Unit) {
+    Text(stringResource(R.string.presets_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Preset.entries.forEach { p ->
+            val lit = p == active
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (lit) BrutColors.PanelRaised else BrutColors.Recess)
+                    .clickable(enabled = enabled, role = Role.RadioButton) { onPreset(p) }
+                    .semantics { selected = lit }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Lamp(BrutColors.Amber, lit = lit)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    presetName(p).uppercase(),
+                    style = engraved(BrutType.Legend),
+                    color = when {
+                        !enabled -> BrutColors.CreamFaint
+                        lit -> BrutColors.Cream
+                        else -> BrutColors.CreamDim
+                    },
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    Text(
+        active?.let { presetHint(it) } ?: stringResource(R.string.presets_none),
+        style = BrutType.Body,
+        color = BrutColors.CreamDim,
+    )
+}
+
+@Composable
+fun presetName(preset: Preset): String = stringResource(
+    when (preset) {
+        Preset.INTERVIEW -> R.string.preset_interview
+        Preset.CONCERT -> R.string.preset_concert
+        Preset.AMBIANCE -> R.string.preset_ambiance
+        Preset.VOICE_OVER -> R.string.preset_voice_over
+    },
+)
+
+@Composable
+private fun presetHint(preset: Preset): String = stringResource(
+    when (preset) {
+        Preset.INTERVIEW -> R.string.preset_interview_hint
+        Preset.CONCERT -> R.string.preset_concert_hint
+        Preset.AMBIANCE -> R.string.preset_ambiance_hint
+        Preset.VOICE_OVER -> R.string.preset_voice_over_hint
+    },
+)
 
 @Composable
 private fun SheetLegend(text: String) {

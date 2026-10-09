@@ -237,4 +237,33 @@
         <item quantity="one">%d échantillon écrêté à la conversion</item>
         <item quantity="other">%d échantillons écrêtés à la conversion</item>
     </plurals>
+    <string name="presets_title">Préréglages</string>
+    <string name="presets_none">Réglages personnels. Un préréglage change le format et les outils, jamais le gain ni l’entrée.</string>
+    <string name="preset_interview">Interview</string>
+    <string name="preset_concert">Concert</string>
+    <string name="preset_ambiance">Ambiance</string>
+    <string name="preset_voice_over">Voix off</string>
+    <string name="preset_interview_hint">48 kHz · 24 bit · mono, 2 s de pré-enregistrement, piste de sécurité à −12 dB.</string>
+    <string name="preset_concert_hint">48 kHz · 24 bit · stéréo, 5 s de pré-enregistrement, piste de sécurité à −12 dB.</string>
+    <string name="preset_ambiance_hint">96 kHz · 24 bit · stéréo, aucun outil : le son tel quel, dans le détail.</string>
+    <string name="preset_voice_over_hint">48 kHz · 24 bit · mono, 2 s de pré-enregistrement pour garder la première respiration.</string>
+    <string name="quick_started">Brut enregistre</string>
+    <string name="quick_armed">Brut est armé : la prise démarrera au-dessus du seuil</string>
+    <string name="quick_failed">Impossible de lancer la prise</string>
+    <string name="tile_record">Enregistrer</string>
+    <string name="tile_stop">Arrêter</string>
+    <string name="tile_armed">Désarmer</string>
+    <string name="tile_armed_subtitle">Armé</string>
+    <string name="widget_brand">BRUT</string>
+    <string name="widget_ready">PRÊT</string>
+    <string name="widget_recording">● ENREGISTRE</string>
+    <string name="widget_armed">ARMÉ</string>
+    <string name="widget_clip">CLIP</string>
+    <string name="widget_chrono_zero" translatable="false">00:00:00</string>
+    <string name="widget_format_preview" translatable="false">48 kHz · 24 BIT · STÉRÉO</string>
+    <string name="widget_description">REC, chrono et niveau sur l’écran d’accueil</string>
+    <string name="shortcut_record_short">Enregistrer</string>
+    <string name="shortcut_record_long">Lancer une prise</string>
+    <string name="shortcut_library_short">Prises</string>
+    <string name="shortcut_library_long">Ouvrir les prises</string>
 </resources>

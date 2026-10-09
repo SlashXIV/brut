@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- En prise : bague rouge, carré d'arrêt. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp" android:height="56dp" android:viewportWidth="56" android:viewportHeight="56">
+    <path android:fillColor="#FF0D0C0A" android:pathData="M28,1a27,27 0,1 1,0 54a27,27 0,1 1,0 -54z" />
+    <path android:strokeColor="#FFFF4B3E" android:strokeWidth="2.5" android:pathData="M28,3a25,25 0,1 1,0 50a25,25 0,1 1,0 -50z" />
+    <path android:fillColor="#FFFF4B3E" android:pathData="M21,19h14a2,2 0,0 1,2 2v14a2,2 0,0 1,-2 2h-14a2,2 0,0 1,-2 -2v-14a2,2 0,0 1,2 -2z" />
+</vector>

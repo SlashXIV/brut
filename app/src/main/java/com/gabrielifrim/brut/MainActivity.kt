@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         registerLaunchers()
         savedInstanceState?.getString(KEY_SCREEN)?.let { screen = Screen.valueOf(it) }
+        if (savedInstanceState == null) handleShortcut(intent)
         // Console toujours sombre : icônes claires quel que soit le thème du système.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -126,6 +127,24 @@ class MainActivity : ComponentActivity() {
                     PermissionScreen(onGrant = { launcher.launch(permissionsToAsk()) })
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcut(intent)
+    }
+
+    /** Raccourci « Prises » : on arrive directement sur la bibliothèque. */
+    private fun handleShortcut(intent: Intent?) {
+        if (intent?.action != ACTION_LIBRARY || screen == Screen.LIBRARY) return
+        androidx.core.content.pm.ShortcutManagerCompat.reportShortcutUsed(this, SHORTCUT_LIBRARY)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            actions.openLibrary()
+        } else {
+            library.refresh()
+            screen = Screen.LIBRARY
         }
     }
 
@@ -202,6 +221,7 @@ class MainActivity : ComponentActivity() {
         override fun resetClip() = controller.resetClip()
         override fun addMarker() = controller.addMarker()
         override fun setOptions(options: TakeOptions) = controller.setOptions(options)
+        override fun applyPreset(preset: com.gabrielifrim.brut.audio.Preset) = controller.applyPreset(preset)
         override fun resetLoudness() = controller.resetLoudness()
         override fun openLibrary() {
             // Pendant une prise, le micro reste ouvert ; sinon on le rend en quittant la console.
@@ -215,6 +235,11 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_SCREEN, screen.name)
+    }
+
+    companion object {
+        const val ACTION_LIBRARY = "com.gabrielifrim.brut.PRISES"
+        const val SHORTCUT_LIBRARY = "prises"
     }
 
     private fun hasMicPermission() =

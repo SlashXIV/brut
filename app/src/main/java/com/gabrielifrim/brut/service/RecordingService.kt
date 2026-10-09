@@ -85,14 +85,8 @@ class RecordingService : Service() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val stop = PendingIntent.getService(
-            this, 1, Intent(this, RecordingService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
-        val marker = PendingIntent.getService(
-            this, 2, Intent(this, RecordingService::class.java).setAction(ACTION_MARKER),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+        val stop = stopIntent(this)
+        val marker = markerIntent(this)
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_record)
             .setContentTitle(getString(if (armed) R.string.notification_armed_title else R.string.notification_recording_title))
@@ -125,6 +119,18 @@ class RecordingService : Service() {
             )
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+
+        /** Arrêter la prise : notification et widget. */
+        fun stopIntent(context: Context): PendingIntent = PendingIntent.getService(
+            context, 1, Intent(context, RecordingService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        /** Poser un repère sans ouvrir l'appli : notification et widget. */
+        fun markerIntent(context: Context): PendingIntent = PendingIntent.getService(
+            context, 2, Intent(context, RecordingService::class.java).setAction(ACTION_MARKER),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java))

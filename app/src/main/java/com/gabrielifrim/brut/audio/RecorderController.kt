@@ -308,6 +308,18 @@ class RecorderController(private val context: Context) {
         if (options.effectivePrerollSeconds != s.options.effectivePrerollSeconds) restartEngineIfOpen()
     }
 
+    /** Format et outils d'un préréglage, en une seule réouverture de la capture. */
+    fun applyPreset(preset: Preset) {
+        val s = _state.value
+        if (s.isBusy) return
+        val options = preset.optionsKeeping(s.options)
+        if (preset.format == s.format && options == s.options) return
+        _state.update { it.copy(format = preset.format, levels = List(preset.format.channels) { ChannelLevel() }, options = options) }
+        persist()
+        applyMonitor()
+        restartEngineIfOpen()
+    }
+
     /** Remet à zéro la sonie intégrée et la crête vraie maximale. */
     fun resetLoudness() {
         engine?.loudness?.reset()

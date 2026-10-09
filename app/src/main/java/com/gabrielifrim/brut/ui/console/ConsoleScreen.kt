@@ -73,6 +73,7 @@ interface ConsoleActions {
     fun openLibrary()
     fun addMarker()
     fun setOptions(options: com.gabrielifrim.brut.audio.TakeOptions)
+    fun applyPreset(preset: com.gabrielifrim.brut.audio.Preset)
     fun resetLoudness()
     fun resetClip()
     fun consumeMessage()
@@ -183,6 +184,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             headphones = state.headphones,
             onChange = actions::setFormat,
             onOptions = actions::setOptions,
+            onPreset = actions::applyPreset,
         ) { showFormat = false }
     }
     if (showSource) {

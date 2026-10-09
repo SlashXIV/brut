@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plaque du widget : panneau sombre, liseré gravé. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/brut_panel" />
+    <stroke android:width="1dp" android:color="@color/brut_edge" />
+    <corners android:radius="16dp" />
+</shape>

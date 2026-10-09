@@ -51,6 +51,14 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - **Écoute au casque** du signal enregistré
 - Sonie **EBU R128** (instantanée, court terme, intégrée), **crête vraie** et **analyseur de spectre**
 
+**Accès rapide**
+- **Préréglages** Interview, Concert, Ambiance et Voix off : format et outils en un geste, jamais
+  le gain ni l’entrée
+- **Tuile des Paramètres rapides** : lancer ou arrêter une prise depuis le volet, même écran
+  verrouillé, sans ouvrir l’appli
+- **Widget** d’écran d’accueil : REC, chrono, niveau, voyant CLIP et bouton Repère
+- **Raccourcis** sur l’icône (appui long) : Enregistrer, Prises
+
 **Robustesse terrain**
 - Prise interrompue (plantage, batterie, appli tuée) **récupérée** au démarrage suivant
 - Format **RF64** automatique au-delà de 4 Go : pas de limite de durée

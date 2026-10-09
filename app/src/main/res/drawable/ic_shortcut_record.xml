@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Raccourci « Enregistrer » : la touche REC sur la plaque graphite. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FF14120F" android:pathData="M24,0a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z" />
+    <path android:strokeColor="#FF3A332B" android:strokeWidth="1.5" android:pathData="M24,9a15,15 0,1 1,0 30a15,15 0,1 1,0 -30z" />
+    <path android:fillColor="#FFFF4B3E" android:pathData="M24,14a10,10 0,1 1,0 20a10,10 0,1 1,0 -20z" />
+</vector>
