@@ -39,6 +39,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import com.gabrielifrim.brut.audio.EngineStats
+import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -90,6 +95,7 @@ interface ConsoleActions {
 fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     var showFormat by rememberSaveable { mutableStateOf(false) }
     var showSource by rememberSaveable { mutableStateOf(false) }
+    var showEngine by rememberSaveable { mutableStateOf(false) }
     val labels = when (state.format.channels) {
         1 -> listOf(stringResource(R.string.channel_mono))
         2 -> listOf(stringResource(R.string.channel_left), stringResource(R.string.channel_right))
@@ -140,7 +146,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                             Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                             Spacer(Modifier.height(10.dp))
-                            SourceStrip(state, onClick = { showSource = true })
+                            SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
                             Warnings(state)
                             Spacer(Modifier.height(10.dp))
                             gainPanel()
@@ -153,7 +159,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                         Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                         Spacer(Modifier.height(10.dp))
-                        SourceStrip(state, onClick = { showSource = true })
+                        SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
                         Warnings(state)
                         Spacer(Modifier.height(10.dp))
                         meters(Modifier.fillMaxWidth().height(compactMeterHeight))
@@ -166,7 +172,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                 else -> Column(Modifier.fillMaxSize()) {
                     Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
                     Spacer(Modifier.height(10.dp))
-                    SourceStrip(state, onClick = { showSource = true })
+                    SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
                     Warnings(state)
                     Spacer(Modifier.height(10.dp))
                     meters(Modifier.weight(1f).fillMaxWidth())
@@ -206,6 +212,9 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             onCaptureMode = actions::setCaptureMode,
             onDismiss = { showSource = false },
         )
+    }
+    if (showEngine) {
+        EngineSheet(state.stats, state.isRecording) { showEngine = false }
     }
 }
 
@@ -252,7 +261,7 @@ private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> 
  * repères d'état de la capture tels qu'Android les a réellement mis en place.
  */
 @Composable
-private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
+private fun SourceStrip(state: RecorderState, onClick: () -> Unit, onEngine: () -> Unit) {
     val device = state.selectedDevice
     val capture = state.capture
     val lampColor = when {
@@ -284,7 +293,7 @@ private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                CaptureTags(state)
+                CaptureTags(state, onEngine)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Lamp(lampColor)
@@ -294,9 +303,12 @@ private fun SourceStrip(state: RecorderState, onClick: () -> Unit) {
     }
 }
 
-/** Repères d'état : mode de capture, encodage, fréquence matérielle, effets. */
+/**
+ * Repères d'état : mode de capture, encodage, fréquence matérielle, effets, puis la santé
+ * du moteur (processeur, tampon), qui ouvre son détail au toucher.
+ */
 @Composable
-private fun CaptureTags(state: RecorderState) {
+private fun CaptureTags(state: RecorderState, onEngine: () -> Unit) {
     val c = state.capture
     if (c == null) {
         Text(stringResource(R.string.capture_waiting), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
@@ -316,6 +328,37 @@ private fun CaptureTags(state: RecorderState) {
         } else {
             StatusTag(stringResource(R.string.tag_fx), BrutColors.Amber)
         }
+        state.stats?.let { EngineTags(it, onEngine) }
+    }
+}
+
+@Composable
+private fun EngineTags(stats: EngineStats.Snapshot, onClick: () -> Unit) {
+    val color = engineColor(stats)
+    val cpu = stats.cpuPercent?.let { percent(it / 100f) } ?: "—"
+    // Sans horodatage matériel, on montre au moins la taille de la réserve.
+    val buffer = stats.bufferFill?.let { percent(it) } ?: "${stats.bufferMs.roundToInt()} ms"
+    val spoken = stringResource(R.string.a11y_engine_tags, cpu, buffer)
+    val loss = stringResource(R.string.a11y_engine_loss)
+    val open = stringResource(R.string.a11y_engine_open)
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            // Seule une perte est annoncée d'office ; les chiffres se lisent à la demande.
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                if (stats.lostFrames > 0) {
+                    stateDescription = loss
+                    liveRegion = LiveRegionMode.Polite
+                }
+                role = Role.Button
+                onClick(open) { onClick(); true }
+            },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        StatusTag(stringResource(R.string.tag_cpu, cpu), color)
+        StatusTag(stringResource(R.string.tag_buffer, buffer), color)
     }
 }
 

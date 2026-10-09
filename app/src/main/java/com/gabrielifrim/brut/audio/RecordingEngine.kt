@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
@@ -86,6 +87,8 @@ class RecordingEngine(
         fun onWriteError(error: IOException)
         fun onSizeLimitReached()
         fun onReadError(code: Int)
+        /** Santé du moteur, une fois par seconde. */
+        fun onStats(stats: EngineStats.Snapshot)
     }
 
     private lateinit var record: AudioRecord
@@ -133,6 +136,11 @@ class RecordingEngine(
     // Échantillon absolu correspondant à la trame 0 du fichier (pré-enregistrement compris).
     private var fileBase = Long.MIN_VALUE
 
+    private lateinit var stats: EngineStats
+    private val stamp = AudioTimestamp()
+    /** Posé par [attachWriter] (autre thread), consommé par la boucle : les pertes repartent de zéro. */
+    @Volatile private var statsMarkPending = false
+
     @Volatile private var running = false
     private var thread: Thread? = null
     private var lastInfo: CaptureInfo? = null
@@ -160,6 +168,7 @@ class RecordingEngine(
             source = s
             encoding = e
             disableEffects(candidate.audioSessionId)
+            stats = EngineStats(format.sampleRate, candidate.bufferSizeInFrames)
             running = true
             thread = Thread(::loop, "brut-audio").apply { start() }
             return
@@ -231,6 +240,7 @@ class RecordingEngine(
             takeAnchor = null
             fileBase = Long.MIN_VALUE
             takeActive = true
+            statsMarkPending = true
         }
 
     /** Trames actuellement disponibles dans le tampon de pré-enregistrement. */
@@ -293,6 +303,7 @@ class RecordingEngine(
             }
             val readFrames = read / format.channels
             if (readFrames == 0) continue
+            val started = System.nanoTime()
 
             decodeLtc(floats, readFrames)
             meter.inspectInput(floats, readFrames)
@@ -303,12 +314,14 @@ class RecordingEngine(
             feedMonitor(floats, readFrames)
 
             var written = 0L
+            var writeNanos = -1L
             writerLock.withLock {
                 val w = writer
                 if (w == null) {
                     preroll.push(floats, readFrames)
                     return@withLock
                 }
+                val writeStarted = System.nanoTime()
                 if (prerollPending) {
                     prerollPending = false
                     preroll.drain(scratch) { chunk, n -> writeBlock(w, chunk, n, null, false, bytes) }
@@ -322,6 +335,7 @@ class RecordingEngine(
                     sinceHeader = 0
                 }
                 written = w.framesWritten
+                writeNanos = System.nanoTime() - writeStarted
             }
 
             position += readFrames
@@ -338,8 +352,23 @@ class RecordingEngine(
                     lastInfo = info
                     listener.onCaptureInfo(info)
                 }
+                if (statsMarkPending) {
+                    statsMarkPending = false
+                    stats.markTake()
+                }
+                stats.timestamp(hardwareFrames(), position)
+                stats.cpu(Process.getElapsedCpuTime(), System.nanoTime(), Runtime.getRuntime().availableProcessors())
+                listener.onStats(stats.snapshot())
             }
+            stats.block(readFrames, System.nanoTime() - started, writeNanos)
         }
+    }
+
+    /** Trames captées par le matériel à l'instant présent, d'après l'horodatage d'Android. */
+    private fun hardwareFrames(): Long? {
+        if (record.getTimestamp(stamp, AudioTimestamp.TIMEBASE_MONOTONIC) != AudioRecord.SUCCESS) return null
+        // La position horodatée, prolongée jusqu'à maintenant au rythme de l'échantillonnage.
+        return stamp.framePosition + (System.nanoTime() - stamp.nanoTime) * format.sampleRate / 1_000_000_000L
     }
 
     private var safetyScratch = FloatArray(0)

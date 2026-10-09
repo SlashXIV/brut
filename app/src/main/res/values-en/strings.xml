@@ -111,6 +111,7 @@
     <!-- Robustesse -->
     <string name="marker_silenced">Mic muted by the system</string>
     <string name="marker_unsilenced">Mic restored</string>
+    <string name="marker_loss">Dropout (buffer overrun)</string>
     <string name="marker_manual">Marker %1$d</string>
     <string name="marker_resumed">Resumed after a capture interruption</string>
     <string name="msg_recovered">Interrupted take recovered: %1$s (%2$s)</string>
@@ -349,4 +350,31 @@
     <string name="export_suffix_channel">ch%1$d</string>
     <string name="library_multi_playback" tools:ignore="PluralsCandidate">%1$d-channel take: playback plays channels 1 and 2; export gives access to each one.</string>
     <string name="gain_link_all">Link all</string>
+
+    <string name="percent">%1$d%%</string>
+    <string name="tag_cpu">CPU %1$s</string>
+    <string name="tag_buffer">BUFFER %1$s</string>
+    <string name="a11y_engine_tags">Engine health: processor %1$s, buffer %2$s</string>
+    <string name="a11y_engine_open">show details</string>
+    <string name="a11y_engine_loss">Sample dropout detected</string>
+    <string name="engine_title">Engine</string>
+    <string name="engine_subtitle">What capture costs, measured every second. Measuring never touches the sound.</string>
+    <string name="engine_waiting">Measuring…</string>
+    <string name="engine_cpu">PROCESSOR</string>
+    <string name="engine_cpu_hint">Share of the whole device (all cores) used by Brut, display included.</string>
+    <string name="engine_dsp">AUDIO LOAD</string>
+    <string name="engine_dsp_value">avg %1$s · worst %2$s</string>
+    <string name="engine_dsp_hint" formatted="false">Share of each 20 ms block spent processing and writing the sound. Above 100%, capture falls behind.</string>
+    <string name="engine_buffer">BUFFER</string>
+    <string name="engine_buffer_value">%1$s ms · %2$s full</string>
+    <string name="engine_buffer_unknown">%1$s ms · fill unknown</string>
+    <string name="engine_buffer_hint">Android’s reserve between the mic and Brut. It fills up when Brut reads too slowly; once full, samples are lost.</string>
+    <string name="engine_write">DISK WRITE</string>
+    <string name="engine_write_value">worst %1$s ms</string>
+    <string name="engine_write_idle">not recording</string>
+    <string name="engine_write_hint">Longest time taken to write one block to the file. A slow SD card shows up here.</string>
+    <string name="engine_loss">DROPOUTS</string>
+    <string name="engine_loss_none">none</string>
+    <string name="engine_loss_value">%1$s ms</string>
+    <string name="engine_loss_hint">Since the take started, or since monitoring started. During a take, each dropout is marked in the file.</string>
 </resources>

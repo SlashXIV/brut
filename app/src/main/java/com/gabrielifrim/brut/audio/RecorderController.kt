@@ -80,6 +80,8 @@ data class RecorderState(
     val markerCount: Int = 0,
     /** Timecode LTC reçu à l'instant (null : aucun signal lisible). */
     val ltcReadout: String? = null,
+    /** Santé du moteur (charge, tampon, pertes), relevée une fois par seconde. */
+    val stats: EngineStats.Snapshot? = null,
     val message: UserMessage? = null,
 ) {
     val isArmed: Boolean get() = phase == Phase.ARMED
@@ -576,6 +578,7 @@ class RecorderController(private val context: Context) {
     private fun closeEngine() {
         engine?.stop()
         engine = null
+        _state.update { it.copy(stats = null) }
     }
 
     private fun restartEngineIfOpen() {
@@ -667,6 +670,16 @@ class RecorderController(private val context: Context) {
             // et un repère marque l'endroit exact dans le fichier.
             if (_state.value.isRecording && before != null && before.silenced != info.silenced) {
                 engine?.addMarker(context.getString(if (info.silenced) R.string.marker_silenced else R.string.marker_unsilenced))
+            }
+        }
+
+        override fun onStats(stats: EngineStats.Snapshot) {
+            val before = _state.value.stats
+            _state.update { it.copy(stats = stats) }
+            // Un débordement du tampon est un trou dans la prise : on le marque à l'endroit
+            // où il est constaté, pour le retrouver au montage.
+            if (_state.value.isRecording && stats.lostFrames > (before?.lostFrames ?: 0L)) {
+                engine?.addMarker(context.getString(R.string.marker_loss))
             }
         }
 

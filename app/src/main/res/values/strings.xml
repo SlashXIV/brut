@@ -111,6 +111,7 @@
     <!-- Robustesse -->
     <string name="marker_silenced">Micro coupé par le système</string>
     <string name="marker_unsilenced">Micro rendu</string>
+    <string name="marker_loss">Perte (tampon débordé)</string>
     <string name="marker_manual">Repère %1$d</string>
     <string name="marker_resumed">Reprise après une interruption de la capture</string>
     <string name="msg_recovered">Prise interrompue récupérée : %1$s (%2$s)</string>
@@ -352,4 +353,31 @@
     <string name="export_suffix_channel">voie%1$d</string>
     <string name="library_multi_playback" tools:ignore="PluralsCandidate">Prise de %1$d voies : l’écoute joue les voies 1 et 2 ; l’export donne accès à chacune.</string>
     <string name="gain_link_all">Lier les voies</string>
+
+    <string name="percent">%1$d %%</string>
+    <string name="tag_cpu">CPU %1$s</string>
+    <string name="tag_buffer">TAMPON %1$s</string>
+    <string name="a11y_engine_tags">Santé du moteur : processeur %1$s, tampon %2$s</string>
+    <string name="a11y_engine_open">voir le détail</string>
+    <string name="a11y_engine_loss">Perte d’échantillons détectée</string>
+    <string name="engine_title">Moteur</string>
+    <string name="engine_subtitle">Ce que coûte la capture, relevé chaque seconde. La mesure ne touche pas au son.</string>
+    <string name="engine_waiting">Mesure en cours…</string>
+    <string name="engine_cpu">PROCESSEUR</string>
+    <string name="engine_cpu_hint">Part de tout l’appareil (tous cœurs confondus) utilisée par Brut, affichage compris.</string>
+    <string name="engine_dsp">CHARGE AUDIO</string>
+    <string name="engine_dsp_value">moy. %1$s · pire %2$s</string>
+    <string name="engine_dsp_hint" formatted="false">Part des 20 ms de chaque bloc passée à traiter et écrire le son. Au-delà de 100 %, la capture prend du retard.</string>
+    <string name="engine_buffer">TAMPON</string>
+    <string name="engine_buffer_value">%1$s ms · rempli à %2$s</string>
+    <string name="engine_buffer_unknown">%1$s ms · remplissage inconnu</string>
+    <string name="engine_buffer_hint">Réserve d’Android entre le micro et Brut. Elle se remplit si Brut lit trop lentement ; pleine, des échantillons sont perdus.</string>
+    <string name="engine_write">ÉCRITURE DISQUE</string>
+    <string name="engine_write_value">pire %1$s ms</string>
+    <string name="engine_write_idle">pas de prise</string>
+    <string name="engine_write_hint">Temps le plus long pour écrire un bloc dans le fichier. Une carte SD lente se voit ici.</string>
+    <string name="engine_loss">PERTES</string>
+    <string name="engine_loss_none">aucune</string>
+    <string name="engine_loss_value">%1$s ms</string>
+    <string name="engine_loss_hint">Depuis le début de la prise, ou de l’écoute. Pendant une prise, chaque perte est marquée d’un repère dans le fichier.</string>
 </resources>

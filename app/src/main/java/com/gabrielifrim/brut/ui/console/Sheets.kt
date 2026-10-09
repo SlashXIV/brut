@@ -31,6 +31,7 @@ import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.AudioFormatSpec
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureSource
+import com.gabrielifrim.brut.audio.EngineStats
 import com.gabrielifrim.brut.audio.Preset
 import com.gabrielifrim.brut.audio.TakeOptions
 import com.gabrielifrim.brut.audio.TimecodeRate
@@ -48,6 +49,8 @@ import com.gabrielifrim.brut.ui.formatBytes
 import com.gabrielifrim.brut.ui.formatRate
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutType
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -519,4 +522,79 @@ private fun TimecodeSection(options: TakeOptions, channels: Int, locked: Boolean
     }
     Spacer(Modifier.height(10.dp))
     Text(stringResource(R.string.tc_hint), style = BrutType.Body, color = BrutColors.CreamDim)
+}
+
+/** Niveau d'alerte d'un relevé du moteur : ambre dès la moitié, rouge à la moindre perte. */
+fun engineColor(stats: EngineStats.Snapshot): Color = when {
+    stats.lostFrames > 0 -> BrutColors.Red
+    stats.dspPeak > 0.5f || (stats.bufferFill ?: 0f) > 0.5f -> BrutColors.Amber
+    else -> BrutColors.CreamDim
+}
+
+@Composable
+fun percent(fraction: Float): String = stringResource(R.string.percent, (fraction * 100).roundToInt())
+
+private fun oneDecimal(v: Float) = String.format(Locale.getDefault(), "%.1f", v)
+
+/**
+ * Santé du moteur : charge, tampon, écriture et pertes, avec une phrase pour chaque
+ * mesure. Les valeurs suivent l'état (une fois par seconde) tant que la feuille est ouverte.
+ */
+@Composable
+fun EngineSheet(stats: EngineStats.Snapshot?, recording: Boolean, onDismiss: () -> Unit) {
+    BrutSheet(onDismiss) {
+        Text(stringResource(R.string.engine_title), style = BrutType.Title)
+        Text(stringResource(R.string.engine_subtitle), style = BrutType.Body, color = BrutColors.CreamDim)
+        Spacer(Modifier.height(16.dp))
+        if (stats == null) {
+            Text(stringResource(R.string.engine_waiting), style = BrutType.Body, color = BrutColors.CreamDim)
+            return@BrutSheet
+        }
+        RackPlate(Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                EngineRow(
+                    stringResource(R.string.engine_cpu),
+                    stats.cpuPercent?.let { percent(it / 100f) } ?: "—",
+                    stringResource(R.string.engine_cpu_hint),
+                )
+                EngineRow(
+                    stringResource(R.string.engine_dsp),
+                    stringResource(R.string.engine_dsp_value, percent(stats.dspAverage), percent(stats.dspPeak)),
+                    stringResource(R.string.engine_dsp_hint),
+                )
+                val ms = stats.bufferMs.roundToInt().toString()
+                EngineRow(
+                    stringResource(R.string.engine_buffer),
+                    stats.bufferFill?.let { stringResource(R.string.engine_buffer_value, ms, percent(it)) }
+                        ?: stringResource(R.string.engine_buffer_unknown, ms),
+                    stringResource(R.string.engine_buffer_hint),
+                )
+                EngineRow(
+                    stringResource(R.string.engine_write),
+                    stats.writeWorstMs?.takeIf { recording }?.let { stringResource(R.string.engine_write_value, oneDecimal(it)) }
+                        ?: stringResource(R.string.engine_write_idle),
+                    stringResource(R.string.engine_write_hint),
+                )
+                EngineRow(
+                    stringResource(R.string.engine_loss),
+                    if (stats.lostFrames == 0L) stringResource(R.string.engine_loss_none)
+                    else stringResource(R.string.engine_loss_value, oneDecimal(stats.lostMs)),
+                    stringResource(R.string.engine_loss_hint),
+                    if (stats.lostFrames > 0) BrutColors.Red else BrutColors.Amber,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EngineRow(label: String, value: String, hint: String, color: Color = BrutColors.Amber) {
+    Column(Modifier.semantics(mergeDescendants = true) {}) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = engraved(BrutType.Legend), color = BrutColors.CreamDim, modifier = Modifier.weight(1f))
+            Readout(value, color = color)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(hint, style = BrutType.Body, color = BrutColors.CreamDim)
+    }
 }
