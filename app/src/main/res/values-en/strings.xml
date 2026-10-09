@@ -329,4 +329,23 @@
     <string name="library_ltc_right">Right channel</string>
     <string name="library_ltc_done">Stamped from LTC: %1$s</string>
     <string name="library_ltc_missing">No readable LTC on this channel.</string>
+    <!-- Multipiste -->
+    <string name="track_name">Channel %1$d</string>
+    <string name="bext_gains_multi">gains %1$s dB</string>
+    <string name="format_short_channels">%1$d CH</string>
+    <plurals name="warning_fewer_channels">
+        <item quantity="one">The input only provides %1$d channel: Android fills in the others, which carry none of its sound.</item>
+        <item quantity="other">The input only provides %1$d channels: Android fills in the others, which carry none of its sound.</item>
+    </plurals>
+    <string name="a11y_channel_n">channel %1$d</string>
+    <string name="gain_all_channels">ALL</string>
+    <string name="tc_ltc">LTC</string>
+    <string name="export_all">ALL</string>
+    <string name="export_separate">SPLIT</string>
+    <string name="export_hint_separate" tools:ignore="PluralsCandidate">Split channels: %1$d mono files, one per channel, samples copied as they are.</string>
+    <string name="export_hint_channel_n" tools:ignore="PluralsCandidate">Channel %1$d only, its samples copied as they are.</string>
+    <string name="export_note_channel_n" tools:ignore="PluralsCandidate">Channel %1$d only.</string>
+    <string name="export_suffix_channel">ch%1$d</string>
+    <string name="library_multi_playback" tools:ignore="PluralsCandidate">%1$d-channel take: playback plays channels 1 and 2; export gives access to each one.</string>
+    <string name="gain_link_all">Link all</string>
 </resources>

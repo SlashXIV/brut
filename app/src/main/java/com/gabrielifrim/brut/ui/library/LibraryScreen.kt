@@ -195,7 +195,7 @@ fun LibraryScreen(
 
     stamping?.let { take ->
         StampDialog(
-            stereo = (take.info?.channels ?: 1) >= 2,
+            channels = take.info?.channels ?: 1,
             onChannel = { actions.stampFromLtc(take, it); stamping = null },
             onDismiss = { stamping = null },
         )
@@ -329,7 +329,7 @@ private fun TakeHeader(take: Take, modifier: Modifier = Modifier) {
 private fun formatLine(take: Take): String {
     val i = take.info ?: return stringResource(R.string.library_unreadable) + " · " + formatBytes(take.sizeBytes)
     val depth = if (i.isFloat) "32F" else "${i.bitsPerSample}"
-    val ch = stringResource(if (i.channels == 1) R.string.format_short_mono else R.string.format_short_stereo)
+    val ch = com.gabrielifrim.brut.ui.console.channelsLabel(i.channels)
     return "${formatRate(i.sampleRate)} · $depth BIT · $ch · ${formatBytes(take.sizeBytes)}"
 }
 
@@ -379,6 +379,9 @@ private fun MountedTake(
                 val rate = info.timecodeRate ?: com.gabrielifrim.brut.audio.TimecodeRate.DEFAULT
                 val tc = com.gabrielifrim.brut.audio.Timecode.fromSamples(b.timeReference, rate, info.sampleRate).format(rate)
                 Text(stringResource(R.string.library_tc, tc, rate.label), style = BrutType.ReadoutSmall, color = BrutColors.Amber)
+            }
+            if ((info?.channels ?: 0) > 2) {
+                Text(stringResource(R.string.library_multi_playback, info!!.channels), style = BrutType.Body, color = BrutColors.CreamDim)
             }
             if (recording) {
                 Text(stringResource(R.string.library_recording_busy), style = BrutType.Body, color = BrutColors.Amber)
@@ -561,13 +564,23 @@ private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: 
 
 /** Choix de la voie qui porte le LTC, et ce que le calage fait (et ne fait pas). */
 @Composable
-private fun StampDialog(stereo: Boolean, onChannel: (Int) -> Unit, onDismiss: () -> Unit) {
+private fun StampDialog(channels: Int, onChannel: (Int) -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.library_ltc_stamp), style = BrutType.Title, color = BrutColors.Cream)
                 Text(stringResource(R.string.library_ltc_body), style = BrutType.Body, color = BrutColors.CreamDim)
-                if (stereo) {
+                if (channels > 2) {
+                    // Une touche par voie, par rangées de quatre.
+                    (0 until channels).chunked(4).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { c ->
+                                ActionButton(stringResource(R.string.track_name, c + 1), BrutColors.Amber, Modifier.weight(1f)) { onChannel(c) }
+                            }
+                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                } else if (channels == 2) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionButton(stringResource(R.string.library_ltc_left), BrutColors.Amber, Modifier.weight(1f)) { onChannel(0) }
                         ActionButton(stringResource(R.string.library_ltc_right), BrutColors.Amber, Modifier.weight(1f)) { onChannel(1) }

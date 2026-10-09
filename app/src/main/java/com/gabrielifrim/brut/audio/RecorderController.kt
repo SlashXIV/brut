@@ -57,7 +57,7 @@ data class RecorderState(
     val selectedDeviceId: Int? = null,
     val capture: CaptureInfo? = null,
     val levels: List<ChannelLevel> = List(2) { ChannelLevel() },
-    val gainDb: List<Float> = listOf(0f, 0f),
+    val gainDb: List<Float> = List(AudioFormatSpec.MAX_CHANNELS) { 0f },
     val gainLinked: Boolean = true,
     val meterMode: MeterMode = MeterMode.PEAK,
     /** Mode de capture imposé ; null = automatique. */
@@ -269,7 +269,11 @@ class RecorderController(private val context: Context) {
 
     fun setFormat(format: AudioFormatSpec) {
         if (_state.value.isRecording || format == _state.value.format) return
-        _state.update { it.copy(format = format, levels = List(format.channels) { ChannelLevel() }) }
+        _state.update {
+            // Une voie LTC qui n'existe plus dans le nouveau format revient à l'horloge.
+            val ltc = it.options.ltcChannel?.takeIf { c -> c < format.channels }
+            it.copy(format = format, levels = List(format.channels) { ChannelLevel() }, options = it.options.copy(ltcChannel = ltc))
+        }
         persist()
         restartEngineIfOpen()
     }
@@ -400,10 +404,10 @@ class RecorderController(private val context: Context) {
         }
         return try {
             val bext = bextFor(file.displayName, start, format, safetyDb)
-            val tracks = if (format.channels == 2) {
-                listOf(context.getString(R.string.channel_left_name), context.getString(R.string.channel_right_name))
-            } else {
-                listOf(context.getString(R.string.format_mono))
+            val tracks = when (format.channels) {
+                1 -> listOf(context.getString(R.string.format_mono))
+                2 -> listOf(context.getString(R.string.channel_left_name), context.getString(R.string.channel_right_name))
+                else -> List(format.channels) { context.getString(R.string.track_name, it + 1) }
             }
             val speed = IxmlSpeed(_state.value.options.timecodeRate, format.sampleRate, format.bitDepth.bits, bext.timeReference)
             val ixml = Ixml.encode(bext.description, "Brut", bext.originatorReference, tracks, speed)
@@ -428,10 +432,10 @@ class RecorderController(private val context: Context) {
                 else -> d.productName
             }
         } ?: "?"
-        val gains = if (format.channels == 2) {
-            context.getString(R.string.bext_gains_stereo, signedDb(s.gainDb[0]), signedDb(s.gainDb[1]))
-        } else {
-            context.getString(R.string.bext_gain_mono, signedDb(s.gainDb[0]))
+        val gains = when (format.channels) {
+            1 -> context.getString(R.string.bext_gain_mono, signedDb(s.gainDb[0]))
+            2 -> context.getString(R.string.bext_gains_stereo, signedDb(s.gainDb[0]), signedDb(s.gainDb[1]))
+            else -> context.getString(R.string.bext_gains_multi, (0 until format.channels).joinToString(" / ") { "${it + 1} ${signedDb(s.gainDb[it])}" })
         }
         val source = s.capture?.source?.name ?: "?"
         val safety = safetyDb?.let { context.getString(R.string.bext_safety, signedDb(it)) }.orEmpty()

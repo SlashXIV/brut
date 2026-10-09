@@ -105,10 +105,10 @@ class TakePlayer(private val context: Context) {
 
     private fun loop(t: Take, i: WavInfo, startFrame: Long) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-        // Brut n'enregistre qu'en mono ou stéréo ; un fichier multicanal étranger n'est pas lu.
-        if (i.channels !in 1..2) { finish(); return }
+        // Une prise multipiste s'écoute sur ses voies 1 et 2 : le casque n'a que deux oreilles.
+        val outChannels = minOf(i.channels, 2)
         val channel: SeekableByteChannel = openChannel(context, t) ?: run { finish(); return }
-        val mask = if (i.channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+        val mask = if (outChannels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
         val minBuffer = AudioTrack.getMinBufferSize(i.sampleRate, mask, AudioFormat.ENCODING_PCM_FLOAT)
         val track = runCatching {
             AudioTrack.Builder()
@@ -125,13 +125,14 @@ class TakePlayer(private val context: Context) {
                         .setChannelMask(mask)
                         .build(),
                 )
-                .setBufferSizeInBytes(maxOf(minBuffer * 2, i.sampleRate / 10 * i.channels * 4))
+                .setBufferSizeInBytes(maxOf(minBuffer * 2, i.sampleRate / 10 * outChannels * 4))
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
         }.getOrNull() ?: run { channel.close(); finish(); return }
 
         val block = 2048
         val samples = FloatArray(block * i.channels)
+        val pair = if (i.channels > 2) FloatArray(block * 2) else null
         val scratch = ByteBuffer.allocate(block * i.blockAlign)
         var frame = startFrame
         var base = startFrame // trame correspondant à la tête de lecture 0 de l'AudioTrack
@@ -157,7 +158,15 @@ class TakePlayer(private val context: Context) {
                     }
                     break
                 }
-                track.write(samples, 0, n * i.channels, AudioTrack.WRITE_BLOCKING)
+                if (pair != null) {
+                    for (f in 0 until n) {
+                        pair[f * 2] = samples[f * i.channels]
+                        pair[f * 2 + 1] = samples[f * i.channels + 1]
+                    }
+                    track.write(pair, 0, n * 2, AudioTrack.WRITE_BLOCKING)
+                } else {
+                    track.write(samples, 0, n * i.channels, AudioTrack.WRITE_BLOCKING)
+                }
                 frame += n
                 val heard = (base + track.playbackHeadPosition).coerceIn(0, i.frames)
                 _state.update { it.copy(positionFrames = heard) }

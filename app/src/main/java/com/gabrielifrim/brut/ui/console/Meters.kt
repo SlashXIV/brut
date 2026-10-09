@@ -105,16 +105,40 @@ fun MeterBridge(
             .background(BrutColors.Recess)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            levels.forEachIndexed { c, level ->
-                ClipLamp(level, channelLabels[c], spokenChannel(c, levels.size), onResetClip)
-                Spacer(Modifier.width(8.dp))
+        // Au-delà de 2 voies : un voyant numéroté par voie, et pas de vu-mètres à aiguille
+        // (huit cadrans sur un téléphone ne se liraient plus).
+        val multi = levels.size > 2
+        if (multi) {
+            Row(Modifier.fillMaxWidth()) {
+                Spacer(Modifier.weight(1f))
+                ModeSwitch(mode, onModeChange, allowVu = false)
             }
-            Spacer(Modifier.weight(1f))
-            ModeSwitch(mode, onModeChange)
+            Spacer(Modifier.height(8.dp))
+            ClipStrip(levels, channelLabels, onResetClip)
+        } else {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                levels.forEachIndexed { c, level ->
+                    ClipLamp(level, channelLabels[c], spokenChannel(c, levels.size), onResetClip)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                ModeSwitch(mode, onModeChange)
+            }
         }
-        when (mode) {
-            MeterMode.PEAK -> Row(
+        when (if (multi && mode == MeterMode.VU) MeterMode.PEAK else mode) {
+            MeterMode.PEAK -> if (multi) {
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                ) {
+                    Scale(Modifier.width(SCALE_WIDTH).fillMaxHeight())
+                    levels.forEachIndexed { c, level ->
+                        LedBar(level, spokenChannel(c, levels.size), Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+            } else Row(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -153,8 +177,17 @@ fun MeterBridge(
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            levels.forEachIndexed { c, level -> Readouts(channelLabels[c], spokenChannel(c, levels.size), level) }
+        if (multi) {
+            Row(Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(SCALE_WIDTH))
+                levels.forEachIndexed { c, level ->
+                    CompactReadout(channelLabels[c], spokenChannel(c, levels.size), level, Modifier.weight(1f))
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                levels.forEachIndexed { c, level -> Readouts(channelLabels[c], spokenChannel(c, levels.size), level) }
+            }
         }
     }
 }
@@ -164,17 +197,18 @@ fun MeterBridge(
  * active est en ambre, les autres restent lisibles pour savoir ce qui vient.
  */
 @Composable
-private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
-    val labels = listOf(
+private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit, allowVu: Boolean = true) {
+    val labels = listOfNotNull(
         MeterMode.PEAK to stringResource(R.string.meter_mode_peak),
-        MeterMode.VU to stringResource(R.string.meter_mode_vu),
+        (MeterMode.VU to stringResource(R.string.meter_mode_vu)).takeIf { allowVu },
         MeterMode.LUFS to stringResource(R.string.meter_mode_lufs),
         MeterMode.SPECTRUM to stringResource(R.string.meter_mode_spectrum),
     )
-    val all = MeterMode.entries
-    val next = all[(mode.ordinal + 1) % all.size]
+    val all = labels.map { it.first }
+    val shown = if (mode in all) mode else MeterMode.PEAK
+    val next = all[(all.indexOf(shown) + 1) % all.size]
     val name = stringResource(R.string.a11y_meter_mode)
-    val current = labels.first { it.first == mode }.second
+    val current = labels.first { it.first == shown }.second
     val nextLabel = stringResource(R.string.a11y_switch_to, labels.first { it.first == next }.second)
     Row(
         Modifier
@@ -191,7 +225,7 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit) {
     ) {
         labels.forEachIndexed { i, (m, text) ->
             if (i > 0) Text(" \u00B7 ", style = BrutType.Legend, color = BrutColors.CreamFaint)
-            Text(text, style = BrutType.Legend, color = if (m == mode) BrutColors.Amber else BrutColors.CreamDim)
+            Text(text, style = BrutType.Legend, color = if (m == shown) BrutColors.Amber else BrutColors.CreamDim)
         }
     }
 }
@@ -239,6 +273,62 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
         )
     }
 }
+
+/** Voyants de saturation en bandeau : un par voie, numéroté. Toucher = effacer. */
+@Composable
+private fun ClipStrip(levels: List<ChannelLevel>, labels: List<String>, onReset: () -> Unit) {
+    val resetLabel = stringResource(R.string.clip_reset)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.clip), style = BrutType.Legend, color = BrutColors.CreamDim, modifier = Modifier.width(SCALE_WIDTH - 4.dp))
+        levels.forEachIndexed { c, level ->
+            val name = stringResource(R.string.a11y_clip, spokenChannel(c, levels.size))
+            val state = stringResource(
+                when {
+                    level.clipped -> R.string.a11y_clip_file
+                    level.inputClipped -> R.string.a11y_clip_input
+                    else -> R.string.a11y_clip_off
+                },
+            )
+            val color = if (level.inputClipped && !level.clipped) BrutColors.Amber else BrutColors.Red
+            val lit = level.clipped || level.inputClipped
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(if (lit) color else color.copy(alpha = 0.10f))
+                    .clickable(onClick = onReset)
+                    .clearAndSetSemantics {
+                        contentDescription = name
+                        stateDescription = state
+                        liveRegion = LiveRegionMode.Polite
+                        onClick(resetLabel) { onReset(); true }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(labels[c], style = BrutType.Legend, color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.55f))
+            }
+        }
+    }
+}
+
+/** Lecture d'une voie en multipiste : son numéro et sa crête, sous sa barre de LED. */
+@Composable
+private fun CompactReadout(label: String, spoken: String, level: ChannelLevel, modifier: Modifier) {
+    val floor = stringResource(R.string.dbfs_floor)
+    val summary = stringResource(R.string.a11y_levels, spoken, spokenDb(level.holdDb), spokenDb(level.rmsDb), spokenDb(level.maxDb))
+    Column(modifier.clearAndSetSemantics { contentDescription = summary }, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = BrutType.Legend, color = BrutColors.Amber)
+        Text(
+            formatDb(level.holdDb)?.substringBefore(',')?.substringBefore('.') ?: floor,
+            style = BrutType.ReadoutSmall,
+            color = if (level.maxDb > -1f) BrutColors.Red else BrutColors.Cream,
+            maxLines = 1,
+        )
+    }
+}
+
+private val SCALE_WIDTH = 34.dp
 
 @Composable
 private fun LedBar(level: ChannelLevel, spoken: String, modifier: Modifier) {
@@ -334,9 +424,11 @@ private fun ReadoutLine(name: String, value: String, highlight: Boolean = false)
 fun spokenChannel(index: Int, count: Int): String = stringResource(
     when {
         count == 1 -> R.string.a11y_channel_mono
+        count > 2 -> R.string.a11y_channel_n
         index == 0 -> R.string.a11y_channel_left
         else -> R.string.a11y_channel_right
     },
+    index + 1,
 )
 
 /** Niveau à lire à voix haute, arrondi au décibel : « −12 dBFS », ou « silence ». */
@@ -367,4 +459,12 @@ fun Lamp(color: Color, modifier: Modifier = Modifier, lit: Boolean = true) {
             .clip(RoundedCornerShape(50))
             .background(if (lit) color else color.copy(alpha = 0.2f)),
     )
+}
+
+/** « MONO », « STÉRÉO » ou « 4 VOIES ». */
+@Composable
+fun channelsLabel(channels: Int): String = when (channels) {
+    1 -> stringResource(R.string.format_short_mono)
+    2 -> stringResource(R.string.format_short_stereo)
+    else -> stringResource(R.string.format_short_channels, channels)
 }

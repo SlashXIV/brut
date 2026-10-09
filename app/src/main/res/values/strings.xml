@@ -308,6 +308,8 @@
     <string name="bext_description">Entrée : %1$s ; %2$s%3$s ; capture %4$s ; enregistré sans traitement par Brut</string>
     <string name="bext_gains_stereo">gain G %1$s dB / D %2$s dB</string>
     <string name="bext_gain_mono">gain %1$s dB</string>
+    <!-- Espace initiale protégée : Android supprime les blancs en tête de ressource. -->
+    <!-- Espace initiale protégée : Android supprime les blancs en tête de ressource. -->
     <string name="bext_safety"> ; piste de sécurité %1$s dB</string>
     <!-- Timecode -->
     <string name="tc_title">Timecode</string>
@@ -330,4 +332,23 @@
     <string name="library_ltc_right">Voie droite</string>
     <string name="library_ltc_done">Calée sur le LTC : %1$s</string>
     <string name="library_ltc_missing">Aucun LTC lisible sur cette voie.</string>
+    <!-- Multipiste -->
+    <string name="track_name">Voie %1$d</string>
+    <string name="bext_gains_multi">gains %1$s dB</string>
+    <string name="format_short_channels">%1$d VOIES</string>
+    <plurals name="warning_fewer_channels">
+        <item quantity="one">L’entrée ne fournit que %1$d voie : Android complète les autres, qui ne portent pas de son à elle.</item>
+        <item quantity="other">L’entrée ne fournit que %1$d voies : Android complète les autres, qui ne portent pas de son à elle.</item>
+    </plurals>
+    <string name="a11y_channel_n">voie %1$d</string>
+    <string name="gain_all_channels">TOUTES</string>
+    <string name="tc_ltc">LTC</string>
+    <string name="export_all">TOUTES</string>
+    <string name="export_separate">SÉPAR.</string>
+    <string name="export_hint_separate" tools:ignore="PluralsCandidate">Voies séparées : %1$d fichiers mono, un par voie, échantillons recopiés tels quels.</string>
+    <string name="export_hint_channel_n" tools:ignore="PluralsCandidate">Voie %1$d seule, ses échantillons recopiés tels quels.</string>
+    <string name="export_note_channel_n" tools:ignore="PluralsCandidate">Voie %1$d seule.</string>
+    <string name="export_suffix_channel">voie%1$d</string>
+    <string name="library_multi_playback" tools:ignore="PluralsCandidate">Prise de %1$d voies : l’écoute joue les voies 1 et 2 ; l’export donne accès à chacune.</string>
+    <string name="gain_link_all">Lier les voies</string>
 </resources>

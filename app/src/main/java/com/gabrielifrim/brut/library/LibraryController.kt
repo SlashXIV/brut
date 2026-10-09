@@ -180,6 +180,13 @@ class LibraryController(private val context: Context, customFolder: () -> androi
 
     fun shareIntent(take: Take): Intent = repository.shareIntent(take)
 
+    /** « Gauche » / « Droite » en stéréo, « Voie 3 » au-delà. */
+    private fun channelName(channels: Int, index: Int): String = when {
+        channels == 2 && index == 0 -> context.getString(R.string.channel_left_name)
+        channels == 2 -> context.getString(R.string.channel_right_name)
+        else -> context.getString(R.string.track_name, index + 1)
+    }
+
     // --- Timecode -----------------------------------------------------------------
 
     /**
@@ -307,16 +314,24 @@ class LibraryController(private val context: Context, customFolder: () -> androi
         isActive: () -> Boolean,
     ): Pair<List<String>, Long> {
         val ranges = if (split) WavExport.segments(info, trim.start, trim.end) else listOf(trim.start until trim.end)
-        val total = ranges.sumOf { it.last - it.first + 1 }.coerceAtLeast(1)
+        // « Séparées » : chaque voie dans son fichier mono ; sinon une seule passe.
+        val picks: List<Int?> = when (channels) {
+            ChannelPick.All -> listOf(null)
+            is ChannelPick.One -> listOf(channels.index)
+            ChannelPick.Separate -> (0 until info.channels).toList()
+        }
+        val jobs = ranges.withIndex().flatMap { (k, r) -> picks.map { c -> Triple(k, r, c) } }
+        val total = jobs.sumOf { it.second.last - it.second.first + 1 }.coerceAtLeast(1)
         val names = mutableListOf<String>()
         var done = 0L
         var clipped = 0L
         var shown = -1
-        ranges.forEachIndexed { k, range ->
-            val spec = ExportSpec(range.first, range.last + 1, bitDepth, channels, sampleRate)
+        for ((k, range, pick) in jobs) {
+            val spec = ExportSpec(range.first, range.last + 1, bitDepth, pick, sampleRate)
             val target = WavExport.targetFormat(info, spec)
-            val suffix = if (split) context.getString(R.string.export_suffix_part) + (k + 1) else context.getString(R.string.export_suffix_extract)
-            val file = storage.createNamed(TakeRepository.sanitize("${take.baseName}_$suffix"))
+            val part = if (split) context.getString(R.string.export_suffix_part) + (k + 1) else context.getString(R.string.export_suffix_extract)
+            val voice = if (channels == ChannelPick.Separate && pick != null) "_" + context.getString(R.string.export_suffix_channel, pick + 1) else ""
+            val file = storage.createNamed(TakeRepository.sanitize("${take.baseName}_$part$voice"))
             try {
                 val input = openChannel(context, take) ?: throw IOException("Prise illisible")
                 val result = input.use {
@@ -349,21 +364,23 @@ class LibraryController(private val context: Context, customFolder: () -> androi
     /** bext (si l'original en a un) et iXML : l'extrait dit d'où il vient et ce qu'on lui a fait. */
     private fun metadataFor(take: Take, info: WavInfo, spec: ExportSpec, target: AudioFormatSpec, name: String): List<Pair<String, ByteArray>> {
         val rate = info.sampleRate.toDouble()
-        val channelName = when (spec.channels) {
-            ChannelPick.ALL -> null
-            ChannelPick.LEFT -> context.getString(R.string.channel_left_name)
-            ChannelPick.RIGHT -> context.getString(R.string.channel_right_name)
-        }
+        val channelName = spec.channel?.let { channelName(info.channels, it) }
         val origin = buildList {
             add(context.getString(R.string.export_note, take.baseName, formatDuration(spec.startFrame / rate), formatDuration(spec.endFrame / rate)))
             if (WavExport.resamples(info, spec)) add(context.getString(R.string.export_note_resampled, formatRate(target.sampleRate)))
             if (!WavExport.isBitExact(info, spec) && target.bitDepth != WavExport.sourceDepth(info)) {
                 add(context.getString(R.string.export_note_convert, depthName(context, target.bitDepth)))
             }
-            channelName?.let { add(context.getString(R.string.export_note_channel, it.lowercase())) }
+            spec.channel?.let { c ->
+                add(
+                    if (info.channels == 2) context.getString(R.string.export_note_channel, channelName(2, c).lowercase())
+                    else context.getString(R.string.export_note_channel_n, c + 1),
+                )
+            }
         }.joinToString(" ")
         val note = listOfNotNull(origin, info.description).joinToString("\n")
         val tracks = when {
+            target.channels > 2 -> List(target.channels) { context.getString(R.string.track_name, it + 1) }
             target.channels == 2 -> listOf(context.getString(R.string.channel_left_name), context.getString(R.string.channel_right_name))
             channelName != null -> listOf(channelName)
             else -> listOf(context.getString(R.string.format_mono))

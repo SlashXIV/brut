@@ -93,7 +93,9 @@ class RecordingEngine(
     private lateinit var source: CaptureSource
     private val effects = mutableListOf<AudioEffect>()
     val meter = LevelMeter(format.sampleRate, format.channels)
-    val loudness = LoudnessMeter(format.sampleRate, format.channels)
+    /** Sonie mesurée sur les voies 1 et 2 : la somme de pistes indépendantes ne voudrait rien dire. */
+    val loudness = LoudnessMeter(format.sampleRate, minOf(format.channels, 2))
+    private var pairScratch = FloatArray(0)
     val spectrum = SpectrumAnalyzer(format.sampleRate, format.channels)
     private val preroll = PrerollBuffer(format.channels, prerollSeconds * format.sampleRate)
 
@@ -152,10 +154,8 @@ class RecordingEngine(
         } else {
             listOf(CaptureEncoding.FLOAT, CaptureEncoding.PCM_16)
         }
-        val mask = if (format.channels == 2) AudioFormat.CHANNEL_IN_STEREO else AudioFormat.CHANNEL_IN_MONO
-
         for (s in sources) for (e in encodings) {
-            val candidate = tryOpen(s, e, mask) ?: continue
+            val candidate = tryOpen(s, e) ?: continue
             record = candidate
             source = s
             encoding = e
@@ -168,9 +168,14 @@ class RecordingEngine(
     }
 
     @SuppressLint("MissingPermission")
-    private fun tryOpen(s: CaptureSource, e: CaptureEncoding, mask: Int): AudioRecord? {
-        val minBuffer = AudioRecord.getMinBufferSize(format.sampleRate, mask, e.androidEncoding)
-        if (minBuffer <= 0) return null
+    private fun tryOpen(s: CaptureSource, e: CaptureEncoding): AudioRecord? {
+        // Au-delà de 2 voies, pas de positions (gauche, droite…) mais des index : voie 1 à N
+        // telles que l'interface USB les présente, sans aucun mélange.
+        val multi = format.channels > 2
+        val positionMask = if (format.channels == 1) AudioFormat.CHANNEL_IN_MONO else AudioFormat.CHANNEL_IN_STEREO
+        val stereoMin = AudioRecord.getMinBufferSize(format.sampleRate, positionMask, e.androidEncoding)
+        if (stereoMin <= 0) return null
+        val minBuffer = if (multi) stereoMin / 2 * format.channels else stereoMin
         val wanted = format.sampleRate / 5 * format.channels * e.bytesPerSample // 200 ms
         val r = try {
             AudioRecord.Builder()
@@ -179,7 +184,7 @@ class RecordingEngine(
                     AudioFormat.Builder()
                         .setSampleRate(format.sampleRate)
                         .setEncoding(e.androidEncoding)
-                        .setChannelMask(mask)
+                        .apply { if (multi) setChannelIndexMask((1 shl format.channels) - 1) else setChannelMask(positionMask) }
                         .build(),
                 )
                 .setBufferSizeInBytes(max(minBuffer * 4, wanted))
@@ -293,7 +298,7 @@ class RecordingEngine(
             meter.inspectInput(floats, readFrames)
             val modified = gain.apply(floats, readFrames)
             meter.process(floats, readFrames)
-            loudness.process(floats, readFrames)
+            loudness.process(firstPair(floats, readFrames), readFrames)
             if (spectrumEnabled) spectrum.push(floats, readFrames)
             feedMonitor(floats, readFrames)
 
@@ -396,7 +401,20 @@ class RecordingEngine(
         }
         val track = monitor ?: openMonitor()?.also { monitor = it } ?: return
         if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
-        track.write(floats, 0, frames * format.channels, AudioTrack.WRITE_NON_BLOCKING)
+        // En multipiste, le casque reçoit les voies 1 et 2 ; le fichier, lui, garde tout.
+        val out = firstPair(floats, frames)
+        track.write(out, 0, frames * minOf(format.channels, 2), AudioTrack.WRITE_NON_BLOCKING)
+    }
+
+    /** Les voies 1 et 2 d'un bloc multipiste (le bloc lui-même en mono ou stéréo). */
+    private fun firstPair(floats: FloatArray, frames: Int): FloatArray {
+        if (format.channels <= 2) return floats
+        if (pairScratch.size < frames * 2) pairScratch = FloatArray(frames * 2)
+        for (f in 0 until frames) {
+            pairScratch[f * 2] = floats[f * format.channels]
+            pairScratch[f * 2 + 1] = floats[f * format.channels + 1]
+        }
+        return pairScratch
     }
 
     private fun openMonitor(): AudioTrack? = runCatching {

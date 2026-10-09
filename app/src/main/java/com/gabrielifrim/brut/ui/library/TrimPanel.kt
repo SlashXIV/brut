@@ -229,9 +229,15 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
     val rateChoices: List<Int?> = listOf<Int?>(null) + AudioFormatSpec.SUPPORTED_SAMPLE_RATES.filter { it != info.sampleRate }
     val rate = rateChoices[rateIndex.coerceIn(0, rateChoices.lastIndex)]
     val depth = depthChoices[depthIndex.coerceIn(0, depthChoices.lastIndex)]
-    val channelChoices = if (info.channels == 2) ChannelPick.entries else listOf(ChannelPick.ALL)
+    val channelChoices: List<ChannelPick> = if (info.channels == 1) {
+        listOf(ChannelPick.All)
+    } else {
+        listOf(ChannelPick.All) + (0 until info.channels).map { ChannelPick.One(it) } + ChannelPick.Separate
+    }
     val channels = channelChoices[channelIndex.coerceIn(0, channelChoices.lastIndex)]
-    val spec = ExportSpec(trim.start, trim.end, depth, channels, rate)
+    val single = (channels as? ChannelPick.One)?.index
+    // Le format s'apprécie sur un des fichiers : en « séparées », chacun est une voie seule.
+    val spec = ExportSpec(trim.start, trim.end, depth, single ?: if (channels == ChannelPick.Separate) 0 else null, rate)
     val segments = remember(info, trim.start, trim.end) { WavExport.segments(info, trim.start, trim.end).size }
     val busy = exportProgress != null
     val enabled = !busy && !recording
@@ -264,17 +270,26 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
                 enabled = enabled,
                 knobSize = 40.dp,
             )
-            if (info.channels == 2) {
-                val labels = mapOf(
-                    ChannelPick.ALL to stringResource(R.string.export_both),
-                    ChannelPick.LEFT to stringResource(R.string.export_left),
-                    ChannelPick.RIGHT to stringResource(R.string.export_right),
-                )
+            if (info.channels >= 2) {
+                val both = stringResource(if (info.channels == 2) R.string.export_both else R.string.export_all)
+                val left = stringResource(R.string.export_left)
+                val right = stringResource(R.string.export_right)
+                val separate = stringResource(R.string.export_separate)
                 RotarySelector(
                     legend = stringResource(R.string.export_channels),
                     options = channelChoices,
                     selected = channels,
-                    label = { labels.getValue(it) },
+                    label = { pick ->
+                        when (pick) {
+                            ChannelPick.All -> both
+                            ChannelPick.Separate -> separate
+                            is ChannelPick.One -> when {
+                                info.channels > 2 -> "${pick.index + 1}"
+                                pick.index == 0 -> left
+                                else -> right
+                            }
+                        }
+                    },
                     onSelect = { channelIndex = channelChoices.indexOf(it) },
                     enabled = enabled,
                     knobSize = 40.dp,
@@ -293,9 +308,13 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
             }
             if (!target.bitDepth.isFloat && (info.isFloat || WavExport.resamples(info, spec))) add(stringResource(R.string.export_hint_clip))
         }
-        if (channels != ChannelPick.ALL) {
-            val name = stringResource(if (channels == ChannelPick.LEFT) R.string.channel_left_name else R.string.channel_right_name)
-            add(stringResource(R.string.export_hint_channel, name.lowercase()))
+        when {
+            channels == ChannelPick.Separate -> add(stringResource(R.string.export_hint_separate, info.channels))
+            single != null && info.channels == 2 -> {
+                val name = stringResource(if (single == 0) R.string.channel_left_name else R.string.channel_right_name)
+                add(stringResource(R.string.export_hint_channel, name.lowercase()))
+            }
+            single != null -> add(stringResource(R.string.export_hint_channel_n, single + 1))
         }
         add(stringResource(R.string.export_hint_original))
     }

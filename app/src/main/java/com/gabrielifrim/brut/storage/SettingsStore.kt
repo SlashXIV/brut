@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.first
 /** Réglages retrouvés d'une session à l'autre. */
 data class SavedSettings(
     val format: AudioFormatSpec = AudioFormatSpec(),
-    val gainDb: List<Float> = listOf(0f, 0f),
+    /** Gain de chaque voie possible (toujours [AudioFormatSpec.MAX_CHANNELS] valeurs). */
+    val gainDb: List<Float> = List(AudioFormatSpec.MAX_CHANNELS) { 0f },
     val gainLinked: Boolean = true,
     /** Entrée choisie, identifiée par « type|nom » : l'identifiant Android change à chaque branchement. */
     val deviceKey: String? = null,
@@ -40,7 +41,17 @@ class SettingsStore(private val context: Context) {
         val channels = p[CHANNELS]?.takeIf { it in 1..AudioFormatSpec.MAX_CHANNELS } ?: 2
         return SavedSettings(
             format = AudioFormatSpec(rate, depth, channels),
-            gainDb = listOf(p[GAIN_L] ?: 0f, p[GAIN_R] ?: 0f),
+            // Voies 1 et 2 dans leurs clés historiques (réglages des versions stéréo), les autres à la suite.
+            gainDb = run {
+                val extra = p[GAINS_EXTRA]?.split(';')?.mapNotNull { it.toFloatOrNull() }.orEmpty()
+                List(AudioFormatSpec.MAX_CHANNELS) { c ->
+                    when (c) {
+                        0 -> p[GAIN_L] ?: 0f
+                        1 -> p[GAIN_R] ?: 0f
+                        else -> extra.getOrNull(c - 2) ?: 0f
+                    }
+                }
+            },
             gainLinked = p[LINKED] ?: true,
             deviceKey = p[DEVICE],
             captureMode = p[CAPTURE]?.let { name -> CaptureSource.entries.firstOrNull { it.name == name } },
@@ -65,6 +76,7 @@ class SettingsStore(private val context: Context) {
             p[CHANNELS] = settings.format.channels
             p[GAIN_L] = settings.gainDb[0]
             p[GAIN_R] = settings.gainDb[1]
+            p[GAINS_EXTRA] = settings.gainDb.drop(2).joinToString(";")
             p[LINKED] = settings.gainLinked
             p[METER] = settings.meterMode.name
             p[PREROLL] = settings.options.prerollSeconds
@@ -86,6 +98,7 @@ class SettingsStore(private val context: Context) {
         val CHANNELS = intPreferencesKey("canaux")
         val GAIN_L: Preferences.Key<Float> = floatPreferencesKey("gain_g")
         val GAIN_R: Preferences.Key<Float> = floatPreferencesKey("gain_d")
+        val GAINS_EXTRA = stringPreferencesKey("gains_voies_3_8")
         val LINKED = booleanPreferencesKey("gains_lies")
         val DEVICE = stringPreferencesKey("entree")
         val METER = stringPreferencesKey("affichage_mesure")

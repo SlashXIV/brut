@@ -8,10 +8,15 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
 
 /**
- * Voies gardées à l'export. Extraire une voie n'est pas un mélange : ses échantillons
- * sont recopiés tels quels, l'autre est simplement laissée de côté.
+ * Voies gardées à l'export : toutes, une seule, ou chacune dans son propre fichier mono
+ * (la livraison habituelle d'une prise multipiste). Extraire une voie n'est pas un
+ * mélange : ses échantillons sont recopiés tels quels, les autres laissées de côté.
  */
-enum class ChannelPick { ALL, LEFT, RIGHT }
+sealed interface ChannelPick {
+    data object All : ChannelPick
+    data class One(val index: Int) : ChannelPick
+    data object Separate : ChannelPick
+}
 
 /** Ce qu'on exporte d'une prise : l'intervalle [startFrame, endFrame[ et la forme du fichier. */
 data class ExportSpec(
@@ -19,7 +24,8 @@ data class ExportSpec(
     val endFrame: Long,
     /** null = résolution d'origine (copie à l'octet près). */
     val bitDepth: BitDepth? = null,
-    val channels: ChannelPick = ChannelPick.ALL,
+    /** null = toutes les voies ; sinon l'index de la seule voie gardée. */
+    val channel: Int? = null,
     /** null = fréquence d'origine. Une autre fréquence passe par le [Resampler]. */
     val sampleRate: Int? = null,
 ) {
@@ -54,7 +60,7 @@ object WavExport {
 
     fun targetFormat(info: WavInfo, spec: ExportSpec): AudioFormatSpec {
         val depth = spec.bitDepth ?: sourceDepth(info) ?: throw IOException("Résolution d'origine impossible à recopier")
-        val channels = if (spec.channels == ChannelPick.ALL) info.channels else 1
+        val channels = if (spec.channel == null) info.channels else 1
         return AudioFormatSpec(spec.sampleRate ?: info.sampleRate, depth, channels)
     }
 
@@ -114,14 +120,10 @@ object WavExport {
         isActive: () -> Boolean = { true },
     ): ExportResult {
         require(spec.startFrame in 0..spec.endFrame && spec.endFrame <= info.frames) { "Intervalle hors de la prise" }
-        require(spec.channels == ChannelPick.ALL || info.channels == 2) { "Choix de voie réservé à la stéréo" }
+        require(spec.channel == null || spec.channel in 0 until info.channels) { "Voie absente de la prise" }
         val target = targetFormat(info, spec)
         val exact = isBitExact(info, spec)
-        val pick = when (spec.channels) {
-            ChannelPick.ALL -> -1
-            ChannelPick.LEFT -> 0
-            ChannelPick.RIGHT -> 1
-        }
+        val pick = spec.channel ?: -1
         val raw = ByteBuffer.allocate(BLOCK_FRAMES * info.blockAlign)
         val samples = FloatArray(BLOCK_FRAMES * info.channels)
         val picked = FloatArray(BLOCK_FRAMES * target.channels)
@@ -165,7 +167,7 @@ object WavExport {
                         samples.copyInto(picked, 0, 0, read * info.channels)
                         read * info.channels
                     } else {
-                        for (f in 0 until read) picked[f] = samples[f * 2 + pick]
+                        for (f in 0 until read) picked[f] = samples[f * info.channels + pick]
                         read
                     }
                     if (resampler != null) {

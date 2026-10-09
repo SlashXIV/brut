@@ -78,8 +78,8 @@ class WavExportTest {
     fun `extraction d'une voie recopie ses échantillons tels quels`() {
         val source = write(AudioFormatSpec(48_000, BitDepth.PCM_24, 2), ramp(10_000, 2))
         val all = dataBytes(source)
-        val (left, _) = export(source, ExportSpec(0, 10_000, channels = ChannelPick.LEFT))
-        val (right, _) = export(source, ExportSpec(0, 10_000, channels = ChannelPick.RIGHT))
+        val (left, _) = export(source, ExportSpec(0, 10_000, channel = 0))
+        val (right, _) = export(source, ExportSpec(0, 10_000, channel = 1))
         assertThat(info(left).channels).isEqualTo(1)
         val l = dataBytes(left)
         val r = dataBytes(right)
@@ -177,6 +177,25 @@ class WavExportTest {
         assertThat(result.frames).isEqualTo(66_150) // 1,5 s
         assertThat(o.frames).isEqualTo(66_150)
         assertThat(o.markers).containsExactly(Marker(44_100, "Refrain")) // 48 000 trames après le début = 1 s
+    }
+
+    @Test
+    fun `une voie d'une prise 6 voies sort seule, octet par octet, ou convertie`() {
+        val src = FloatArray(3_000 * 6) { i -> ((i % 6) + 1) / 8f * (if ((i / 6) % 2 == 0) 1f else -1f) }
+        val source = write(AudioFormatSpec(48_000, BitDepth.PCM_24, 6), src)
+        val all = dataBytes(source)
+        val (third, _) = export(source, ExportSpec(0, 3_000, channel = 2))
+        val t = dataBytes(third)
+        assertThat(info(third).channels).isEqualTo(1)
+        for (f in 0 until 3_000) for (b in 0 until 3) assertThat(t[f * 3 + b]).isEqualTo(all[f * 18 + 6 + b])
+        // Même voie, convertie en flottant : le chemin décodé prend aussi la bonne voie.
+        val (converted, _) = export(source, ExportSpec(0, 3_000, BitDepth.FLOAT_32, channel = 5))
+        val out = RandomAccessFile(converted, "r").channel.use { ch ->
+            val i = WavReader.readInfo(ch)
+            FloatArray(i.frames.toInt()).also { WavReader.readFrames(ch, i, 0, i.frames.toInt(), it) }
+        }
+        assertThat(out[0]).isEqualTo(6 / 8f)
+        assertThat(out[1]).isEqualTo(-6 / 8f)
     }
 
     @Test

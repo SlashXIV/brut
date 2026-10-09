@@ -89,7 +89,11 @@ class BrutWidget : AppWidgetProvider() {
                 BitDepth.PCM_24 -> "24 BIT"
                 BitDepth.FLOAT_32 -> "32F"
             }
-            val ch = context.getString(if (s.format.channels == 1) R.string.format_short_mono else R.string.format_short_stereo)
+            val ch = when (s.format.channels) {
+                1 -> context.getString(R.string.format_short_mono)
+                2 -> context.getString(R.string.format_short_stereo)
+                else -> context.getString(R.string.format_short_channels, s.format.channels)
+            }
             return "${formatRate(s.format.sampleRate)} · $depth · $ch"
         }
 

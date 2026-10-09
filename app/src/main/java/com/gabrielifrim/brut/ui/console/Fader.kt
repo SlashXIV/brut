@@ -1,6 +1,11 @@
 package com.gabrielifrim.brut.ui.console
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -90,8 +95,10 @@ fun GainFader(
     val measurer = rememberTextMeasurer()
     val range = GainStage.MAX_DB - GainStage.MIN_DB
 
-    fun emit(next: Float) {
-        val snapped = snap(next)
+    // Les touches − / + avancent d'un pas exact ; seul le glissé s'aimante sur 0 dB
+    // (sinon +0,5 dB depuis 0 retombait aussitôt dans le cran).
+    fun emit(next: Float, detent: Boolean = true) {
+        val snapped = if (detent) snap(next) else ((next.coerceIn(GainStage.MIN_DB, GainStage.MAX_DB) / STEP_DB).roundToInt() * STEP_DB)
         if (snapped == current) return
         val crossedZero = snapped == 0f || (current < 0f) != (snapped < 0f)
         if (crossedZero || snapped == GainStage.MIN_DB || snapped == GainStage.MAX_DB) {
@@ -104,13 +111,13 @@ fun GainFader(
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(channelLabel, style = engraved(BrutType.Title), color = BrutColors.Amber)
         Spacer(Modifier.weight(1f))
-        StepButton("−", stringResource(R.string.gain_decrease)) { emit(current - STEP_DB) }
+        StepButton("−", stringResource(R.string.gain_decrease)) { emit(current - STEP_DB, detent = false) }
         Readout(
             stringResource(R.string.db_value, formatDb(valueDb, signed = true) ?: "0,0"),
             Modifier.padding(horizontal = 8.dp).width(100.dp),
             color = if (valueDb == 0f) BrutColors.Cream else BrutColors.Amber,
         )
-        StepButton("+", stringResource(R.string.gain_increase)) { emit(current + STEP_DB) }
+        StepButton("+", stringResource(R.string.gain_increase)) { emit(current + STEP_DB, detent = false) }
       }
         Canvas(
             Modifier
@@ -199,6 +206,45 @@ fun GainFader(
     }
 }
 
+/**
+ * Gains en multipiste : une touche par voie (son numéro et son gain), et un seul fader
+ * pour la voie choisie, ou pour toutes quand elles sont liées. Huit faders ne tiendraient
+ * pas sur un écran de téléphone à côté des mesures.
+ */
+@Composable
+private fun MultiGain(channels: Int, labels: List<String>, gains: List<Float>, linked: Boolean, onGain: (Int, Float) -> Unit, gainWord: String) {
+    var selected by rememberSaveable { mutableIntStateOf(0) }
+    val current = selected.coerceIn(0, channels - 1)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (c in 0 until channels) {
+            val active = linked || c == current
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (active) BrutColors.PanelRaised else BrutColors.Recess)
+                    .selectable(selected = c == current, enabled = !linked, role = Role.RadioButton) { selected = c }
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(labels[c], style = engraved(BrutType.Legend), color = if (active) BrutColors.Amber else BrutColors.CreamDim)
+                Text(
+                    formatDb(gains[c], signed = true) ?: "0,0",
+                    style = BrutType.ReadoutSmall,
+                    color = if (gains[c] == 0f) BrutColors.CreamDim else BrutColors.Cream,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+    val all = stringResource(R.string.gain_all_channels)
+    if (linked) {
+        GainFader(all, gains[0], { onGain(0, it) }, "$gainWord $all")
+    } else {
+        GainFader(labels[current], gains[current], { onGain(current, it) }, "$gainWord " + stringResource(R.string.track_name, current + 1))
+    }
+}
+
 /** Petit bouton poussoir gravé, pour les pas fins. */
 @Composable
 private fun StepButton(symbol: String, description: String, onClick: () -> Unit) {
@@ -226,7 +272,7 @@ private fun StepButton(symbol: String, description: String, onClick: () -> Unit)
 /** En-tête du panneau de gain : légende gravée et interrupteur de liaison G/D. */
 @Composable
 fun GainPanel(
-    stereo: Boolean,
+    channels: Int,
     labels: List<String>,
     gains: List<Float>,
     linked: Boolean,
@@ -234,12 +280,13 @@ fun GainPanel(
     onLinked: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val stereo = channels == 2
     RackPlate(modifier.fillMaxWidth(), contentPadding = 8.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.gain).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
                 Spacer(Modifier.weight(1f))
-                if (stereo) {
+                if (channels >= 2) {
                     Row(
                         Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -249,11 +296,15 @@ fun GainPanel(
                     ) {
                         Lamp(BrutColors.Amber, lit = linked)
                         Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.gain_link).uppercase(), style = engraved(BrutType.Legend), color = if (linked) BrutColors.Cream else BrutColors.CreamDim)
+                        Text(stringResource(if (stereo) R.string.gain_link else R.string.gain_link_all).uppercase(), style = engraved(BrutType.Legend), color = if (linked) BrutColors.Cream else BrutColors.CreamDim)
                     }
                 }
             }
             val gainWord = stringResource(R.string.gain)
+            if (channels > 2) {
+                MultiGain(channels, labels, gains, linked, onGain, gainWord)
+                return@Column
+            }
             GainFader(
                 labels[0], gains[0], { onGain(0, it) },
                 "$gainWord " + stringResource(if (stereo) R.string.channel_left_long else R.string.format_mono),

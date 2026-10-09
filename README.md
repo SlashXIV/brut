@@ -92,6 +92,13 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - **Changement de fréquence** à l’export (44,1, 48 ou 96 kHz), au choix et signalé comme un
   traitement : filtre sinc, bande passante jusqu’à 20 kHz, plus de 130 dB de réjection
 
+**Multipiste**
+- Jusqu’à **8 voies** avec une interface USB multicanale (Android 9+), chacune en piste
+  indépendante, sans aucun mélange
+- Un crête-mètre, un voyant CLIP et un gain par voie, liables d’un geste
+- Écoute et sonie sur les voies 1 et 2 ; LTC lisible sur n’importe quelle voie
+- Export d’une voie seule ou de **toutes les voies en fichiers mono séparés**, octet par octet
+
 **Timecode**
 - Cadence au choix (23,976 à 30 i/s, drop-frame compris), écrite dans l’iXML avec l’heure de départ
 - **LTC** : branche un générateur (Tentacle, caméra…) sur une voie ; Brut affiche le timecode reçu

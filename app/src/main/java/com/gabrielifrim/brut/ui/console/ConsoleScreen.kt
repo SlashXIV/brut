@@ -89,11 +89,10 @@ interface ConsoleActions {
 fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     var showFormat by rememberSaveable { mutableStateOf(false) }
     var showSource by rememberSaveable { mutableStateOf(false) }
-    val stereo = state.format.channels == 2
-    val labels = if (stereo) {
-        listOf(stringResource(R.string.channel_left), stringResource(R.string.channel_right))
-    } else {
-        listOf(stringResource(R.string.channel_mono))
+    val labels = when (state.format.channels) {
+        1 -> listOf(stringResource(R.string.channel_mono))
+        2 -> listOf(stringResource(R.string.channel_left), stringResource(R.string.channel_right))
+        else -> List(state.format.channels) { "${it + 1}" }
     }
 
     Box(
@@ -118,7 +117,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
         }
         val gainPanel = @Composable {
             GainPanel(
-                stereo = stereo,
+                channels = state.format.channels,
                 labels = labels,
                 gains = state.gainDb,
                 linked = state.gainLinked,
@@ -239,7 +238,7 @@ private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> 
             BitDepth.PCM_24 -> "24"
             BitDepth.FLOAT_32 -> "32F"
         }
-        val channels = stringResource(if (f.channels == 2) R.string.format_short_stereo else R.string.format_short_mono)
+        val channels = channelsLabel(f.channels)
         Readout(
             "${formatRate(f.sampleRate)} · $depth BIT · $channels",
             Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.take_settings_title), onClick = onFormat),
@@ -332,6 +331,11 @@ private fun Warnings(state: RecorderState) {
         // Seulement si le repli est subi : un mode Standard choisi à la main n'a pas à être signalé.
         if (c?.source == CaptureSource.MIC && state.captureMode != CaptureSource.MIC) add(stringResource(R.string.warning_mic_source))
         if (!c?.activeEffects.isNullOrEmpty()) add(stringResource(R.string.warning_effects, c.activeEffects.joinToString()))
+        // Multipiste demandé à une entrée qui a moins de voies : Android remplit le reste.
+        val deviceChannels = c?.deviceChannels
+        if (state.format.channels > 2 && deviceChannels != null && deviceChannels < state.format.channels) {
+            add(androidx.compose.ui.res.pluralStringResource(R.plurals.warning_fewer_channels, deviceChannels, deviceChannels))
+        }
         val deviceRate = c?.deviceSampleRate
         if (deviceRate != null && deviceRate != state.format.sampleRate) {
             add(stringResource(R.string.warning_resampled, formatRate(deviceRate)))
@@ -386,7 +390,11 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
 @Composable
 private fun LtcReadout(state: RecorderState) {
     val channel = state.options.ltcChannel ?: return
-    val side = stringResource(if (channel == 0) R.string.channel_left else R.string.channel_right)
+    val side = when {
+        state.format.channels > 2 -> "${channel + 1}"
+        state.format.channels == 1 -> ""
+        else -> stringResource(if (channel == 0) R.string.channel_left else R.string.channel_right)
+    }
     val tc = state.ltcReadout
     val spoken = if (tc != null) stringResource(R.string.a11y_ltc, tc) else stringResource(R.string.a11y_ltc_none)
     Row(

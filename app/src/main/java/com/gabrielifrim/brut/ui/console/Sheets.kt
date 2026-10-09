@@ -121,7 +121,8 @@ fun FormatSheet(
                 val stereo = stringResource(R.string.format_short_stereo)
                 RotarySelector(
                     legend = stringResource(R.string.format_channels),
-                    options = listOf(1, 2),
+                    // 1 et 2 toujours ; au-delà, seulement ce que l'entrée annonce.
+                    options = listOf(1, 2) + (device?.channelCounts.orEmpty().filter { it in 3..AudioFormatSpec.MAX_CHANNELS } + listOf(format.channels).filter { it > 2 }).distinct().sorted(),
                     selected = format.channels,
                     label = { if (it == 1) mono else stereo },
                     onSelect = { onChange(format.copy(channels = it)) },
@@ -158,7 +159,7 @@ fun FormatSheet(
             style = BrutType.Readout, color = BrutColors.CreamDim,
         )
 
-        ToolsSection(options, headphones, locked, onOptions, stereo = format.channels == 2)
+        ToolsSection(options, headphones, locked, onOptions, channels = format.channels)
     }
 }
 
@@ -405,7 +406,7 @@ private fun deviceDetails(device: InputDevice): String {
  * défaut, l'enregistrement reste brut tant qu'on ne demande rien.
  */
 @Composable
-private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit, stereo: Boolean = true) {
+private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit, channels: Int = 2) {
     val off = stringResource(R.string.tools_off)
     Spacer(Modifier.height(22.dp))
     Text(stringResource(R.string.tools_title), style = BrutType.Title)
@@ -468,7 +469,7 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
     ).forEach {
         Text(stringResource(it), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 4.dp))
     }
-    TimecodeSection(options, stereo, locked, onOptions)
+    TimecodeSection(options, channels, locked, onOptions)
 }
 
 /**
@@ -476,7 +477,7 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
  * (horloge du téléphone, ou LTC reçu sur une voie et lu pendant la prise).
  */
 @Composable
-private fun TimecodeSection(options: TakeOptions, stereo: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit) {
+private fun TimecodeSection(options: TakeOptions, channels: Int, locked: Boolean, onOptions: (TakeOptions) -> Unit) {
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val decimal = java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator
     Spacer(Modifier.height(22.dp))
@@ -497,20 +498,22 @@ private fun TimecodeSection(options: TakeOptions, stereo: Boolean, locked: Boole
             val clock = stringResource(R.string.tc_clock)
             val left = stringResource(R.string.tc_ltc_left)
             val right = stringResource(R.string.tc_ltc_right)
+            val ltcOnly = stringResource(R.string.tc_ltc)
             RotarySelector(
                 legend = stringResource(R.string.tc_source),
-                options = listOf<Int?>(null, 0, 1),
+                options = listOf<Int?>(null) + (0 until channels).toList(),
                 selected = options.ltcChannel,
                 label = {
-                    when (it) {
-                        null -> clock
-                        0 -> left
+                    when {
+                        it == null -> clock
+                        channels == 1 -> ltcOnly
+                        channels > 2 -> "$ltcOnly ${it + 1}"
+                        it == 0 -> left
                         else -> right
                     }
                 },
                 onSelect = { onOptions(options.copy(ltcChannel = it)) },
                 enabled = !locked,
-                isNative = { it != 1 || stereo },
             )
         }
     }
