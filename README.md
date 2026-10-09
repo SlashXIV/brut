@@ -59,6 +59,12 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - **Widget** d’écran d’accueil : REC, chrono, niveau, voyant CLIP et bouton Repère
 - **Raccourcis** sur l’icône (appui long) : Enregistrer, Prises
 
+**Accessibilité et langues**
+- **TalkBack** : niveaux de chaque voie, voyants de saturation annoncés dès qu’ils s’allument,
+  sonie, spectre, durée de la prise et messages
+- Contrastes du texte vérifiés (au moins 4,5:1)
+- Interface en **français** et en **anglais**, au choix dans les réglages Android
+
 **Robustesse terrain**
 - Prise interrompue (plantage, batterie, appli tuée) **récupérée** au démarrage suivant
 - Format **RF64** automatique au-delà de 4 Go : pas de limite de durée
