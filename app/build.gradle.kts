@@ -84,3 +84,50 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
+
+/*
+ * Aucun texte visible codé en dur dans un composable : tout vit dans strings.xml, où s'écrit un
+ * français correct et d'où part la traduction. Détection volontairement simple, par motifs :
+ * un littéral contenant une lettre, passé à Text( ou à un paramètre qui porte du texte visible.
+ * Le `label` d'une animation Compose n'est jamais affiché : il est ignoré. Un faux positif se
+ * lève par `// texte-technique : <raison>` en fin de ligne (la raison est obligatoire).
+ * Repris de Dromos, en tâche simple : Brut n'a qu'un module.
+ */
+val checkHardcodedUiText by tasks.registering {
+    val sources = fileTree("src/main/java") { include("**/*.kt") }
+    val report = layout.buildDirectory.file("reports/hardcoded-ui-text.txt")
+    inputs.files(sources).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(report)
+    doLast {
+        val visibleText = Regex(
+            """(?:\bText\(\s*|\bshowSnackbar\(\s*|\b(contentDescription|title|message|label|hint|""" +
+                """actionLabel|confirmLabel|text|placeholder)\s*=\s*)"((?:[^"\\]|\\.)*)"""",
+        )
+        // Gabarits et échappements (« · », « \n ») retirés : il n'en reste rien à traduire.
+        val template = Regex("""\$\{[^}]*}|\$[A-Za-z_][A-Za-z0-9_]*|\\u[0-9A-Fa-f]{4}|\\.""")
+        val optOut = Regex("""//\s*texte-technique\s*:\s*\S""")
+        val animationCall = Regex("""\b(?:animate\w*|\w*Transition|AnimatedVisibility|AnimatedContent|Crossfade)\s*\(""")
+        val findings = sources.files.sortedBy { it.path }.flatMap { file ->
+            val lines = file.readLines()
+            lines.withIndex().mapNotNull { (index, line) ->
+                val code = line.trimStart()
+                if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*") || optOut.containsMatchIn(line)) return@mapNotNull null
+                val hardcoded = visibleText.findAll(line).any { match ->
+                    val (name, text) = match.destructured
+                    // L'appel d'animation est souvent réparti sur plusieurs lignes au-dessus du label.
+                    val inAnimation = (maxOf(0, index - 8)..index).any { animationCall.containsMatchIn(lines[it]) }
+                    template.replace(text, "").any(Char::isLetter) && !(name == "label" && inAnimation)
+                }
+                if (hardcoded) "${file.path}:${index + 1}  $code" else null
+            }
+        }
+        report.get().asFile.writeText(findings.joinToString("\n"))
+        if (findings.isNotEmpty()) {
+            throw GradleException(
+                "Texte visible codé en dur (à déplacer dans strings.xml, ou à justifier par " +
+                    "« // texte-technique : raison ») :\n" + findings.joinToString("\n"),
+            )
+        }
+    }
+}
+tasks.named("check") { dependsOn(checkHardcodedUiText) }
