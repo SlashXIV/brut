@@ -99,7 +99,7 @@ class RecordingService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setColor(ContextCompat.getColor(this, R.color.brut_amber))
+            .setColor(ContextCompat.getColor(this, R.color.brut_accent))
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }

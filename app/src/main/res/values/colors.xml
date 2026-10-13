@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Palette « Console analogique » : à garder alignée avec ui/theme/Theme.kt -->
-    <color name="brut_graphite">#FF14120F</color>
-    <color name="brut_amber">#FFFFB238</color>
-    <!-- Widget : dessiné par le lanceur, il ne peut pas lire les couleurs Compose. -->
-    <color name="brut_panel">#FF221E19</color>
-    <color name="brut_recess">#FF0D0C0A</color>
-    <color name="brut_edge">#FF3A332B</color>
-    <color name="brut_cream">#FFEFE6D6</color>
-    <color name="brut_cream_dim">#FF9C9284</color>
-    <color name="brut_cream_faint">#FF7A7266</color>
-    <color name="brut_red">#FFFF4B3E</color>
+    <!--
+        Palette Plein jour, pour ce que le système dessine sans Compose (fond de fenêtre au
+        démarrage, widget, notification). values-night porte la palette Scène.
+        Alignées sur ui/theme/Palette.kt : vérifié par PaletteResourcesTest.
+    -->
+    <color name="brut_facade">#FFE8E3D8</color>
+    <color name="brut_plate">#FFF2EEE5</color>
+    <color name="brut_recess">#FFEBE6DC</color>
+    <color name="brut_edge">#FFB5AC9C</color>
+    <color name="brut_ink">#FF17140F</color>
+    <color name="brut_ink_dim">#FF544C42</color>
+    <color name="brut_ink_faint">#FF746B5E</color>
+    <color name="brut_accent">#FF865600</color>
+    <color name="brut_lamp">#FFAF7300</color>
+    <color name="brut_clip">#FFC0182E</color>
+    <!-- Pièces métalliques (boutons du widget) : les mêmes dans les deux palettes. -->
+    <color name="brut_metal">#FF1C1814</color>
 </resources>

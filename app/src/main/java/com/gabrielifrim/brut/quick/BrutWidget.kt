@@ -111,10 +111,10 @@ class BrutWidget : AppWidgetProvider() {
                     },
                 ),
             )
-            v.setTextColor(R.id.widget_status, context.getColor(if (s.isBusy) R.color.brut_red else R.color.brut_cream_dim))
-            if (s.isArmed) v.setTextColor(R.id.widget_status, context.getColor(R.color.brut_amber))
+            v.setTextColor(R.id.widget_status, context.getColor(if (s.isBusy) R.color.brut_clip else R.color.brut_ink_dim))
+            if (s.isArmed) v.setTextColor(R.id.widget_status, context.getColor(R.color.brut_accent))
             v.setTextViewText(R.id.widget_chrono, formatDuration(if (s.isRecording) s.elapsedSeconds else 0.0, withHundredths = false))
-            v.setTextColor(R.id.widget_chrono, context.getColor(if (s.isRecording) R.color.brut_cream else R.color.brut_cream_faint))
+            v.setTextColor(R.id.widget_chrono, context.getColor(if (s.isRecording) R.color.brut_ink else R.color.brut_ink_faint))
             v.setProgressBar(R.id.widget_level, 100, shown.level * 2, false)
             v.setViewVisibility(R.id.widget_level, if (s.isRecording) View.VISIBLE else View.INVISIBLE)
             v.setViewVisibility(R.id.widget_clip, if (shown.clip) View.VISIBLE else View.GONE)

@@ -18,8 +18,6 @@
     <string name="tag_raw">Raw</string>
     <string name="tag_no_agc">No auto gain</string>
     <string name="tag_standard">Standard</string>
-    <string name="tag_no_fx">No effects</string>
-    <string name="tag_fx">Effects active</string>
     <string name="source_none">No input detected</string>
     <string name="source_pick_title">Choose the input</string>
     <string name="source_pick_hint">Brut never forces the built-in mic: pick the input that should record.</string>
@@ -165,7 +163,6 @@
         <item quantity="other">%1$d takes</item>
     </plurals>
     <string name="library_search">Search…</string>
-    <string name="library_sort">Sort</string>
     <string name="library_sort_date">Date</string>
     <string name="library_sort_name">Name</string>
     <string name="library_sort_duration">Length</string>
@@ -412,4 +409,41 @@
     <string name="channel_test_report_phone">Phone: %1$s (Android %2$s)</string>
     <string name="channel_test_report_input">Input: %1$s</string>
     <string name="warning_channels_identical">L and R channels are identical: Android is mixing this input. Run the channel test (Input → Test channels).</string>
+
+    <!-- Display: palette and motion -->
+    <string name="display_title">Display</string>
+    <string name="a11y_display_settings">Display settings</string>
+    <string name="display_palette">Palette</string>
+    <string name="palette_auto">Automatic</string>
+    <string name="palette_scene">Stage</string>
+    <string name="palette_plein_jour">Daylight</string>
+    <string name="display_palette_hint">Automatic follows the phone’s theme: Stage when it is dark, Daylight when it is light.</string>
+    <string name="display_motion">Motion</string>
+    <string name="motion_expressive">Expressive</string>
+    <string name="motion_sober">Calm</string>
+    <string name="display_motion_hint">Calm removes decorative motion. The needle, peaks and levels keep moving: they are measurements.</string>
+    <string name="display_motion_system">Animations are turned off in Android settings: nothing moves except the meters.</string>
+    <string name="vu_peak">PEAK</string>
+    <string name="path_format">Format</string>
+    <string name="path_gain_linked">L/R linked</string>
+    <string name="path_gain_split">L/R split</string>
+    <string name="path_gain_tracks_linked">tracks linked</string>
+    <string name="path_gain_per_track">Per track</string>
+    <string name="a11y_path_input">Input: %1$s, %2$s</string>
+    <string name="a11y_path_format">Format: %1$s, %2$s</string>
+    <string name="a11y_path_gain">Gain: %1$s, %2$s</string>
+    <string name="a11y_path_gain_clip">Gain: %1$s, clipping</string>
+    <string name="a11y_path_file">WAV file</string>
+    <string name="path_file_idle">not recording</string>
+    <string name="path_file_armed">take armed, waiting for signal</string>
+    <string name="path_file_recording">recording</string>
+    <string name="path_change_input">change input</string>
+    <string name="path_change_format">set the format</string>
+    <string name="engine_line">Engine</string>
+    <string name="tag_loss">LOSSES %1$s</string>
+    <plurals name="library_markers">
+        <item quantity="one">%d marker</item>
+        <item quantity="other">%d markers</item>
+    </plurals>
+    <string name="library_back_console">Console</string>
 </resources>

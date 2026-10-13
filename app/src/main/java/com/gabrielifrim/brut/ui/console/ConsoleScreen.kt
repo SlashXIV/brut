@@ -1,31 +1,39 @@
 package com.gabrielifrim.brut.ui.console
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,42 +44,57 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.stateDescription
-import com.gabrielifrim.brut.audio.EngineStats
-import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.BitDepth
 import com.gabrielifrim.brut.audio.CaptureEncoding
 import com.gabrielifrim.brut.audio.CaptureSource
+import com.gabrielifrim.brut.audio.ChannelLevel
+import com.gabrielifrim.brut.audio.EngineStats
+import com.gabrielifrim.brut.audio.LoudnessReading
 import com.gabrielifrim.brut.audio.RecorderState
 import com.gabrielifrim.brut.audio.UserMessage
+import com.gabrielifrim.brut.storage.Appearance
+import com.gabrielifrim.brut.ui.component.Imposed
+import com.gabrielifrim.brut.ui.component.PathNode
+import com.gabrielifrim.brut.ui.component.PanelKey
+import com.gabrielifrim.brut.ui.component.PathState
+import com.gabrielifrim.brut.ui.component.Readout
+import com.gabrielifrim.brut.ui.component.SignalPath
+import com.gabrielifrim.brut.ui.component.StatusTag
+import com.gabrielifrim.brut.ui.component.chassis
+import com.gabrielifrim.brut.ui.component.engraved
 import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatLongDuration
 import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.motion.LocalMotionLevel
+import com.gabrielifrim.brut.ui.motion.Motion
 import com.gabrielifrim.brut.ui.spokenDuration
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 /** Actions de la console, regroupées pour garder l'écran indépendant du contrôleur. */
 interface ConsoleActions {
@@ -94,14 +117,39 @@ interface ConsoleActions {
     fun closeChannelTest()
     fun applyRecipe(recipe: com.gabrielifrim.brut.audio.CaptureRecipe)
     fun forgetRecipe()
+    fun setPalette(id: String)
+    fun setSober(sober: Boolean)
 }
 
+/**
+ * L'état sans ce qui change à chaque mesure (niveaux, sonie, spectre, chrono, LTC) : la console
+ * ne se recompose qu'à un vrai changement. Les voyants de saturation, eux, restent.
+ */
+fun RecorderState.calm(): RecorderState = copy(
+    levels = levels.map { ChannelLevel(clipped = it.clipped, inputClipped = it.inputClipped) },
+    loudness = LoudnessReading(),
+    spectrum = null,
+    framesWritten = 0,
+    ltcReadout = null,
+)
+
+/**
+ * La console. [state] est l'état calme ([calm]) ; [live] est l'état complet, lu seulement par
+ * les instruments (pont de mesure, chrono, LTC), seuls à se redessiner à chaque mesure.
+ */
 @Composable
-fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
+fun ConsoleScreen(
+    state: RecorderState,
+    live: State<RecorderState>,
+    appearance: Appearance,
+    systemMotionOff: Boolean,
+    actions: ConsoleActions,
+) {
     var showFormat by rememberSaveable { mutableStateOf(false) }
     var showSource by rememberSaveable { mutableStateOf(false) }
     var showEngine by rememberSaveable { mutableStateOf(false) }
     var showTest by rememberSaveable { mutableStateOf(false) }
+    var showDisplay by rememberSaveable { mutableStateOf(false) }
     val labels = when (state.format.channels) {
         1 -> listOf(stringResource(R.string.channel_mono))
         2 -> listOf(stringResource(R.string.channel_left), stringResource(R.string.channel_right))
@@ -114,20 +162,7 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
             .chassis()
             .safeDrawingPadding(),
     ) {
-        val meters = @Composable { modifier: Modifier ->
-            MeterBridge(
-                levels = state.levels.take(state.format.channels),
-                channelLabels = labels,
-                mode = state.meterMode,
-                onModeChange = actions::setMeterMode,
-                onResetClip = actions::resetClip,
-                modifier = modifier,
-                loudness = state.loudness,
-                spectrum = state.spectrum,
-                spectrumCenters = state.spectrumCenters,
-                onResetLoudness = actions::resetLoudness,
-            )
-        }
+        val meters = @Composable { modifier: Modifier -> LiveMeters(live, labels, actions, modifier) }
         val gainPanel = @Composable {
             GainPanel(
                 channels = state.format.channels,
@@ -138,54 +173,52 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
                 onLinked = actions::setGainLinked,
             )
         }
+        val top = @Composable {
+            Header(onDisplay = { showDisplay = true }, onLibrary = actions::openLibrary)
+            Spacer(Modifier.height(10.dp))
+            ConsolePath(state, onSource = { showSource = true }, onFormat = { showFormat = true }, onEngine = { showEngine = true })
+            Warnings(state)
+        }
         BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
             val landscape = maxWidth > maxHeight && maxWidth >= 560.dp
-            // Sous ~680 dp de haut, laisser le pont de mesure prendre « le reste » l'écraserait :
-            // on lui donne une hauteur minimale et la console défile.
-            val compact = !landscape && maxHeight < 680.dp
+            // Sous ~680 dp de haut, ou quand le texte est agrandi, laisser le pont de mesure prendre
+            // « le reste » l'écraserait : on lui donne une hauteur minimale et la console défile.
+            val compact = !landscape && (maxHeight < 680.dp || LocalDensity.current.fontScale > 1.3f)
             val compactMeterHeight = maxOf(340.dp, maxHeight * 0.62f)
             when {
+                // Paysage : les mesures sur toute la hauteur ; à droite, chemin et gain défilent
+                // au-dessus du transport, fixé en bas (REC ne doit jamais sortir de la vue).
                 landscape -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     meters(Modifier.weight(1f).fillMaxHeight())
-                    // Le transport reste fixé en bas : le bouton REC ne doit jamais défiler hors de vue.
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                            Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
-                            Spacer(Modifier.height(10.dp))
-                            SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
-                            Warnings(state)
+                            top()
                             Spacer(Modifier.height(10.dp))
                             gainPanel()
                         }
                         Spacer(Modifier.height(8.dp))
-                        Transport(state, actions)
+                        Transport(state, live, actions)
                     }
                 }
                 compact -> Column(Modifier.fillMaxSize()) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
-                        Spacer(Modifier.height(10.dp))
-                        SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
-                        Warnings(state)
+                        top()
                         Spacer(Modifier.height(10.dp))
                         meters(Modifier.fillMaxWidth().height(compactMeterHeight))
                         Spacer(Modifier.height(12.dp))
                         gainPanel()
                     }
                     Spacer(Modifier.height(8.dp))
-                    Transport(state, actions)
+                    Transport(state, live, actions)
                 }
                 else -> Column(Modifier.fillMaxSize()) {
-                    Header(state, onFormat = { showFormat = true }, onLibrary = actions::openLibrary)
-                    Spacer(Modifier.height(10.dp))
-                    SourceStrip(state, onClick = { showSource = true }, onEngine = { showEngine = true })
-                    Warnings(state)
+                    top()
                     Spacer(Modifier.height(10.dp))
                     meters(Modifier.weight(1f).fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
                     gainPanel()
                     Spacer(Modifier.height(8.dp))
-                    Transport(state, actions)
+                    Transport(state, live, actions)
                 }
             }
         }
@@ -238,126 +271,187 @@ fun ConsoleScreen(state: RecorderState, actions: ConsoleActions) {
     if (showEngine) {
         EngineSheet(state.stats, state.isRecording) { showEngine = false }
     }
+    if (showDisplay) {
+        DisplaySheet(appearance, systemMotionOff, actions::setPalette, actions::setSober) { showDisplay = false }
+    }
 }
 
+/** Pont de mesure branché sur l'état vivant : seul ce morceau suit les mesures. */
 @Composable
-private fun Header(state: RecorderState, onFormat: () -> Unit, onLibrary: () -> Unit) {
+private fun LiveMeters(live: State<RecorderState>, labels: List<String>, actions: ConsoleActions, modifier: Modifier) {
+    val s = live.value
+    MeterBridge(
+        levels = s.levels.take(s.format.channels),
+        channelLabels = labels,
+        mode = s.meterMode,
+        onModeChange = actions::setMeterMode,
+        onResetClip = actions::resetClip,
+        modifier = modifier,
+        loudness = s.loudness,
+        spectrum = s.spectrum,
+        spectrumCenters = s.spectrumCenters,
+        onResetLoudness = actions::resetLoudness,
+    )
+}
+
+/** Le logo, puis l'affichage et les prises, en aval comme le signal. */
+@Composable
+private fun Header(onDisplay: () -> Unit, onLibrary: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // Le mot-symbole reprend l'icône : la lettre, puis le trait ambre.
-        Column {
-            Text(stringResource(R.string.app_name).uppercase(), style = BrutType.Title, color = BrutColors.Cream)
-            Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Amber))
+        Column(Modifier.clearAndSetSemantics {}) {
+            Text(stringResource(R.string.app_name).uppercase(), style = BrutType.Title, color = BrutColors.Ink)
+            Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Lamp))
         }
-        Spacer(Modifier.width(10.dp))
-        val libraryLabel = stringResource(R.string.a11y_open_library)
-        Text(
-            stringResource(R.string.library_open).uppercase() + " \u203A",
-            style = engraved(BrutType.Legend),
-            color = BrutColors.Cream,
-            maxLines = 1,
-            modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
-                .background(BrutColors.Panel)
-                .clickable(role = Role.Button, onClick = onLibrary)
-                .semantics { contentDescription = libraryLabel }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        )
         Spacer(Modifier.weight(1f))
-        Spacer(Modifier.width(10.dp))
-        val f = state.format
-        val depth = when (f.bitDepth) {
-            BitDepth.PCM_16 -> "16"
-            BitDepth.PCM_24 -> "24"
-            BitDepth.FLOAT_32 -> "32F"
-        }
-        val channels = channelsLabel(f.channels)
-        Readout(
-            "${formatRate(f.sampleRate)} · $depth BIT · $channels",
-            Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.take_settings_title), onClick = onFormat),
+        DisplayButton(onDisplay)
+        Spacer(Modifier.width(8.dp))
+        val libraryLabel = stringResource(R.string.a11y_open_library)
+        PanelKey(
+            stringResource(R.string.library_open).uppercase() + "  ›",
+            Modifier
+                .clickable(role = Role.Button, onClick = onLibrary)
+                .clearAndSetSemantics {
+                    contentDescription = libraryLabel
+                    role = Role.Button
+                    onClick { onLibrary(); true }
+                },
         )
     }
 }
 
-/**
- * La source, sur une plaque de rack vissée : l'entrée gravée en tête, puis les
- * repères d'état de la capture tels qu'Android les a réellement mis en place.
- */
+/** Réglages d'affichage : un demi-disque, clair d'un côté et sombre de l'autre, comme les deux palettes. */
 @Composable
-private fun SourceStrip(state: RecorderState, onClick: () -> Unit, onEngine: () -> Unit) {
-    val device = state.selectedDevice
-    val capture = state.capture
-    val lampColor = when {
-        device == null -> BrutColors.CreamFaint
-        state.isRerouted || capture?.silenced == true -> BrutColors.Red
-        capture?.source == CaptureSource.MIC -> BrutColors.Amber
-        capture != null -> BrutColors.Green
-        else -> BrutColors.Amber
-    }
-    RackPlate(
+private fun DisplayButton(onClick: () -> Unit) {
+    val label = stringResource(R.string.a11y_display_settings)
+    val ink = BrutColors.InkDim
+    Box(
         Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick),
-        contentPadding = 10.dp,
+            .size(40.dp)
+            .clip(BrutShapes.InsetShape)
+            .background(BrutColors.Plate)
+            .border(1.dp, BrutColors.Edge, BrutShapes.InsetShape)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.source_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
-                    Text("  →  ", style = BrutType.Legend, color = BrutColors.CreamFaint, modifier = Modifier.clearAndSetSemantics {})
-                    Text(
-                        (device?.let { kindLabel(it.kind) } ?: stringResource(R.string.source_none)).uppercase(),
-                        style = engraved(BrutType.Legend), color = BrutColors.Amber,
-                    )
-                }
-                Text(
-                    if (device != null) deviceName(device) else stringResource(R.string.source_none),
-                    style = engraved(BrutType.BodyStrong), color = BrutColors.Cream,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                CaptureTags(state, onEngine)
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Lamp(lampColor)
-                Text("›", style = BrutType.Title, color = BrutColors.CreamDim, modifier = Modifier.clearAndSetSemantics {})
-            }
+        Canvas(Modifier.size(16.dp)) {
+            val r = size.minDimension / 2
+            drawCircle(ink, r, style = Stroke(1.5.dp.toPx()))
+            drawArc(ink, 90f, 180f, useCenter = true, topLeft = Offset.Zero, size = size)
         }
     }
 }
 
 /**
- * Repères d'état : mode de capture, encodage, fréquence matérielle, effets, puis la santé
- * du moteur (processeur, tampon), qui ouvre son détail au toucher.
+ * Le chemin du signal de la prise en cours : l'entrée réellement ouverte, le format, le gain,
+ * le fichier. Ce qu'Android impose se branche sous le nœud où cela se produit.
  */
 @Composable
-private fun CaptureTags(state: RecorderState, onEngine: () -> Unit) {
+private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: () -> Unit, onEngine: () -> Unit) {
+    val device = state.selectedDevice
     val c = state.capture
-    if (c == null) {
-        Text(stringResource(R.string.capture_waiting), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
-        return
+    val f = state.format
+
+    val sourceTag = when (c?.source) {
+        CaptureSource.UNPROCESSED -> stringResource(R.string.tag_raw)
+        CaptureSource.VOICE_RECOGNITION -> stringResource(R.string.tag_no_agc)
+        CaptureSource.MIC -> stringResource(R.string.tag_standard)
+        CaptureSource.CAMCORDER -> stringResource(R.string.tag_camcorder)
+        null -> stringResource(R.string.capture_waiting)
     }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        val (sourceText, sourceColor) = when (c.source) {
-            CaptureSource.UNPROCESSED -> stringResource(R.string.tag_raw) to BrutColors.Green
-            CaptureSource.VOICE_RECOGNITION -> stringResource(R.string.tag_no_agc) to BrutColors.Cream
-            CaptureSource.MIC -> stringResource(R.string.tag_standard) to BrutColors.Amber
-            CaptureSource.CAMCORDER -> stringResource(R.string.tag_camcorder) to BrutColors.Amber
+    val inputName = device?.let { deviceName(it) } ?: stringResource(R.string.source_none)
+    val inputDetail = listOfNotNull(device?.let { kindLabel(it.kind) }, sourceTag).joinToString(" · ")
+    val inputImposed = buildList {
+        if (state.isRerouted) add(Imposed(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()), severe = true))
+        if (c?.silenced == true) add(Imposed(stringResource(R.string.warning_silenced), severe = true))
+        if (c?.channelsIdentical == true && device?.isExternal == true) add(Imposed(stringResource(R.string.warning_channels_identical), severe = true))
+        // Seulement si le repli est subi : un mode Standard choisi à la main n'a pas à être signalé.
+        if (c?.source == CaptureSource.MIC && state.captureMode != CaptureSource.MIC) add(Imposed(stringResource(R.string.warning_mic_source)))
+        if (!c?.activeEffects.isNullOrEmpty()) add(Imposed(stringResource(R.string.warning_effects, c.activeEffects.joinToString())))
+    }
+
+    val depth = when (f.bitDepth) {
+        BitDepth.PCM_16 -> "16"
+        BitDepth.PCM_24 -> "24"
+        BitDepth.FLOAT_32 -> "32F"
+    }
+    val formatValue = "${formatRate(f.sampleRate).replace(" kHz", "k")} · $depth"
+    val formatDetail = listOfNotNull(
+        channelsLabel(f.channels).lowercase(),
+        c?.let { if (it.encoding == CaptureEncoding.FLOAT) "F32" else "I16" },
+        stringResource(R.string.tag_index).lowercase().takeIf { c?.indexMask == true && f.channels <= 2 },
+    ).joinToString(" · ")
+    val formatImposed = buildList {
+        val deviceRate = c?.deviceSampleRate
+        if (deviceRate != null && deviceRate != f.sampleRate) add(Imposed(stringResource(R.string.warning_resampled, formatRate(deviceRate))))
+        // Multipiste demandé à une entrée qui a moins de voies : Android remplit le reste.
+        val deviceChannels = c?.deviceChannels
+        if (f.channels > 2 && deviceChannels != null && deviceChannels < f.channels) {
+            add(Imposed(pluralStringResource(R.plurals.warning_fewer_channels, deviceChannels, deviceChannels)))
         }
-        StatusTag(sourceText, sourceColor)
-        StatusTag(if (c.encoding == CaptureEncoding.FLOAT) "F32" else "I16", BrutColors.CreamDim)
-        if (c.indexMask && state.format.channels <= 2) StatusTag(stringResource(R.string.tag_index), BrutColors.CreamDim)
-        c.deviceSampleRate?.let { StatusTag(formatRate(it).replace(" kHz", "k"), BrutColors.CreamDim) }
-        if (c.activeEffects.isEmpty()) {
-            StatusTag(stringResource(R.string.tag_no_fx), BrutColors.CreamDim)
-        } else {
-            StatusTag(stringResource(R.string.tag_fx), BrutColors.Amber)
-        }
-        state.stats?.let { EngineTags(it, onEngine) }
+    }
+
+    val gains = state.gainDb.take(f.channels)
+    fun db(v: Float) = formatDb(v, signed = true) ?: "0,0"
+    val gainValue = when {
+        f.channels == 1 || state.gainLinked -> stringResource(R.string.db_value, db(gains[0]))
+        f.channels == 2 -> "${db(gains[0])} · ${db(gains[1])}"
+        else -> stringResource(R.string.path_gain_per_track)
+    }
+    val gainDetail = when {
+        f.channels == 1 -> stringResource(R.string.format_mono).lowercase()
+        f.channels == 2 -> stringResource(if (state.gainLinked) R.string.path_gain_linked else R.string.path_gain_split)
+        state.gainLinked -> stringResource(R.string.path_gain_tracks_linked)
+        else -> channelsLabel(f.channels).lowercase()
+    }
+    val clipped = state.levels.take(f.channels).any { it.clipped }
+
+    val nodes = listOf(
+        PathNode(
+            key = stringResource(R.string.source_title), value = inputName, detail = inputDetail,
+            spoken = stringResource(R.string.a11y_path_input, inputName, inputDetail),
+            imposed = inputImposed, alarm = device == null,
+            clickLabel = stringResource(R.string.path_change_input), onClick = onSource,
+        ),
+        PathNode(
+            key = stringResource(R.string.path_format), value = formatValue, detail = formatDetail,
+            // À l'oreille : « 48 kHz, 24 bit », pas « 48k point 24 ».
+            spoken = stringResource(R.string.a11y_path_format, "${formatRate(f.sampleRate)}, ${depth.removeSuffix("F")} bit", formatDetail),
+            imposed = formatImposed,
+            clickLabel = stringResource(R.string.path_change_format), onClick = onFormat,
+        ),
+        PathNode(
+            key = stringResource(R.string.gain), value = gainValue, detail = gainDetail,
+            spoken = if (clipped) stringResource(R.string.a11y_path_gain_clip, gainValue) else stringResource(R.string.a11y_path_gain, gainValue, gainDetail),
+            alarm = clipped,
+        ),
+    )
+    val pathState = when {
+        state.isRecording -> PathState.RECORDING
+        state.isArmed -> PathState.ARMED
+        else -> PathState.IDLE
+    }
+    SignalPath(
+        nodes = nodes,
+        // Sans le temps restant : il baisse pendant la prise et ferait parler TalkBack chaque minute.
+        fileSpoken = stringResource(R.string.a11y_path_file),
+        fileState = stringResource(
+            when (pathState) {
+                PathState.IDLE -> R.string.path_file_idle
+                PathState.ARMED -> R.string.path_file_armed
+                PathState.RECORDING -> R.string.path_file_recording
+            },
+        ),
+        state = pathState,
+    ) {
+        state.stats?.let { EngineLine(it, onEngine) }
     }
 }
 
+/** Santé du moteur sous le chemin : on la touche pour le détail. */
 @Composable
-private fun EngineTags(stats: EngineStats.Snapshot, onClick: () -> Unit) {
+private fun EngineLine(stats: EngineStats.Snapshot, onClick: () -> Unit) {
     val color = engineColor(stats)
     val cpu = stats.cpuPercent?.let { percent(it / 100f) } ?: "—"
     // Sans horodatage matériel, on montre au moins la taille de la réserve.
@@ -365,82 +459,86 @@ private fun EngineTags(stats: EngineStats.Snapshot, onClick: () -> Unit) {
     val spoken = stringResource(R.string.a11y_engine_tags, cpu, buffer)
     val loss = stringResource(R.string.a11y_engine_loss)
     val open = stringResource(R.string.a11y_engine_open)
-    Row(
+    FlowRow(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .fillMaxWidth()
+            .heightIn(min = 32.dp)
+            .clip(BrutShapes.InsetShape)
             .clickable(onClick = onClick)
             // Seule une perte est annoncée d'office ; les chiffres se lisent à la demande.
             .clearAndSetSemantics {
                 contentDescription = spoken
+                // Annonce d'office seulement pour une perte : les pourcentages changent chaque seconde.
                 if (stats.lostFrames > 0) {
                     stateDescription = loss
                     liveRegion = LiveRegionMode.Polite
                 }
                 role = Role.Button
                 onClick(open) { onClick(); true }
-            },
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            }
+            .padding(horizontal = 2.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
+        Text(stringResource(R.string.engine_line).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
         StatusTag(stringResource(R.string.tag_cpu, cpu), color)
         StatusTag(stringResource(R.string.tag_buffer, buffer), color)
+        StatusTag(stringResource(R.string.tag_loss, if (stats.lostFrames == 0L) "0" else formatDuration(stats.lostMs / 1000.0)), if (stats.lostFrames > 0) BrutColors.Clip else BrutColors.InkDim)
     }
 }
 
+/**
+ * Ce qui ne touche pas au chemin du signal mais menace la prise : batterie, espace, prise
+ * armée, écoute sans casque. Un seul conteneur, toujours présent, porte l'annonce TalkBack.
+ */
 @Composable
 private fun Warnings(state: RecorderState) {
-    val c = state.capture
     val warnings = buildList {
-        if (state.isRerouted) add(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()))
-        if (c?.silenced == true) add(stringResource(R.string.warning_silenced))
-        if (c?.channelsIdentical == true && state.selectedDevice?.isExternal == true) add(stringResource(R.string.warning_channels_identical))
         if (state.lowBattery) add(stringResource(R.string.warning_low_battery, state.batteryPercent))
         if (state.isArmed) add(stringResource(R.string.warning_armed, "−${(-state.options.triggerDb).toInt()}"))
         if (state.options.monitor && !state.headphones) add(stringResource(R.string.warning_monitor_no_headphones))
         if (state.lowSpace) add(stringResource(R.string.warning_low_space, formatLongDuration(state.remainingSeconds)))
-        // Seulement si le repli est subi : un mode Standard choisi à la main n'a pas à être signalé.
-        if (c?.source == CaptureSource.MIC && state.captureMode != CaptureSource.MIC) add(stringResource(R.string.warning_mic_source))
-        if (!c?.activeEffects.isNullOrEmpty()) add(stringResource(R.string.warning_effects, c.activeEffects.joinToString()))
-        // Multipiste demandé à une entrée qui a moins de voies : Android remplit le reste.
-        val deviceChannels = c?.deviceChannels
-        if (state.format.channels > 2 && deviceChannels != null && deviceChannels < state.format.channels) {
-            add(androidx.compose.ui.res.pluralStringResource(R.plurals.warning_fewer_channels, deviceChannels, deviceChannels))
-        }
-        val deviceRate = c?.deviceSampleRate
-        if (deviceRate != null && deviceRate != state.format.sampleRate) {
-            add(stringResource(R.string.warning_resampled, formatRate(deviceRate)))
-        }
     }
-    warnings.forEach { text ->
-        Row(
-            Modifier
-                .padding(top = 8.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(BrutShapes.Plate))
-                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
-                .background(BrutColors.Amber.copy(alpha = 0.10f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Lamp(BrutColors.Amber)
-            Spacer(Modifier.width(10.dp))
-            Text(text, style = BrutType.Body, color = BrutColors.Cream)
+    val spoken = warnings.joinToString(". ")
+    val lamp = BrutColors.Lamp
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                liveRegion = LiveRegionMode.Polite
+            },
+    ) {
+        warnings.forEach { text ->
+            Row(
+                Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .clip(BrutShapes.PlateShape)
+                    .background(lamp.copy(alpha = 0.12f))
+                    .drawBehind { drawRect(lamp, Offset.Zero, size.copy(width = 3.dp.toPx())) }
+                    .padding(start = 14.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text, style = BrutType.Body, color = BrutColors.Ink)
+            }
         }
     }
 }
 
 @Composable
-private fun Transport(state: RecorderState, actions: ConsoleActions) {
-    LtcReadout(state)
+private fun Transport(state: RecorderState, live: State<RecorderState>, actions: ConsoleActions) {
+    LtcReadout(state, live)
     ToolsSummary(state)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Clock(state.elapsedSeconds, state.isRecording)
+            LiveClock(live, state.isRecording)
             val sub = when {
                 state.isRecording && state.fileName != null -> stringResource(R.string.recording_to, state.fileName)
                 state.remainingSeconds in 1..600 -> stringResource(R.string.remaining_low, formatLongDuration(state.remainingSeconds))
                 else -> stringResource(R.string.remaining, formatLongDuration(state.remainingSeconds), state.folderLabel)
             }
-            Text(sub, style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sub, style = BrutType.ReadoutSmall, color = BrutColors.InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (state.isRecording) {
             MarkerButton(state.markerCount, actions::addMarker)
@@ -457,14 +555,14 @@ private fun Transport(state: RecorderState, actions: ConsoleActions) {
 
 /** Timecode reçu sur la voie LTC : à vérifier avant REC, comme sur un enregistreur de plateau. */
 @Composable
-private fun LtcReadout(state: RecorderState) {
+private fun LtcReadout(state: RecorderState, live: State<RecorderState>) {
     val channel = state.options.ltcChannel ?: return
     val side = when {
         state.format.channels > 2 -> "${channel + 1}"
         state.format.channels == 1 -> ""
         else -> stringResource(if (channel == 0) R.string.channel_left else R.string.channel_right)
     }
-    val tc = state.ltcReadout
+    val tc = live.value.ltcReadout
     val spoken = if (tc != null) stringResource(R.string.a11y_ltc, tc) else stringResource(R.string.a11y_ltc_none)
     Row(
         Modifier
@@ -474,11 +572,11 @@ private fun LtcReadout(state: RecorderState) {
     ) {
         // Sans LTC au repos, ce n'est qu'un état ; le rouge est réservé à une prise qui le perd.
         val lost = tc == null && state.isRecording
-        Lamp(if (tc != null) BrutColors.Green else if (lost) BrutColors.Red else BrutColors.CreamFaint)
+        Lamp(if (tc != null) BrutColors.Level else if (lost) BrutColors.Clip else BrutColors.InkFaint)
         Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.ltc_label, side), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+        Text(stringResource(R.string.ltc_label, side), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
         Spacer(Modifier.width(8.dp))
-        Readout(tc ?: stringResource(R.string.ltc_none), color = if (tc != null) BrutColors.Amber else if (lost) BrutColors.Red else BrutColors.CreamDim)
+        Readout(tc ?: stringResource(R.string.ltc_none), color = if (tc != null) BrutColors.Accent else if (lost) BrutColors.Clip else BrutColors.InkDim)
     }
 }
 
@@ -494,9 +592,9 @@ private fun ToolsSummary(state: RecorderState) {
     }
     if (parts.isEmpty()) return
     Text(
-        parts.joinToString("  \u00B7  ") { "\u25B8 $it" },
+        parts.joinToString("  ·  ") { "▸ $it" },
         style = engraved(BrutType.Legend),
-        color = BrutColors.Amber,
+        color = BrutColors.Accent,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
@@ -508,9 +606,11 @@ private fun ToolsSummary(state: RecorderState) {
 /**
  * Chrono sur une seule ligne quoi qu'il arrive : les centièmes sont plus petits,
  * comme sur un enregistreur de terrain, et la taille se réduit si l'écran est étroit.
+ * Il lit l'état vivant : c'est le seul texte de la console qui change à chaque mesure.
  */
 @Composable
-private fun Clock(seconds: Double, recording: Boolean) {
+private fun LiveClock(live: State<RecorderState>, recording: Boolean) {
+    val seconds = live.value.elapsedSeconds
     val full = formatDuration(seconds)
     val cut = full.lastIndexOf('.')
     val text = buildAnnotatedString {
@@ -521,7 +621,7 @@ private fun Clock(seconds: Double, recording: Boolean) {
     BasicText(
         text,
         modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
-        style = BrutType.Clock.copy(color = if (recording) BrutColors.Cream else BrutColors.CreamFaint),
+        style = BrutType.Clock.copy(color = if (recording) BrutColors.Ink else BrutColors.InkFaint),
         maxLines = 1,
         softWrap = false,
         autoSize = TextAutoSize.StepBased(minFontSize = 22.sp, maxFontSize = BrutType.Clock.fontSize, stepSize = 1.sp),
@@ -544,7 +644,13 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
             onDone()
         }
     }
-    AnimatedVisibility(message != null, modifier, enter = fadeIn(), exit = fadeOut()) {
+    val motion = LocalMotionLevel.current
+    val ms = if (motion.decorative) Motion.ENTER_MS else Motion.REDUCED_MS
+    AnimatedVisibility(
+        message != null, modifier,
+        enter = if (motion.animates) fadeIn(tween(ms)) else EnterTransition.None,
+        exit = if (motion.animates) fadeOut(tween(ms)) else ExitTransition.None,
+    ) {
         val m = shown ?: return@AnimatedVisibility
         val text = when (m) {
             is UserMessage.Saved -> when {
@@ -566,21 +672,23 @@ private fun MessageBar(message: UserMessage?, onDone: () -> Unit, modifier: Modi
             UserMessage.MonitorNeedsHeadphones -> stringResource(R.string.warning_monitor_no_headphones)
         }
         val accent = when (m) {
-            is UserMessage.Saved -> if (m.ltcMissing) BrutColors.Amber else BrutColors.Green
-            is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Green
-            UserMessage.CaptureResumed, is UserMessage.MarkerAdded, UserMessage.MonitorNeedsHeadphones -> BrutColors.Amber
-            else -> BrutColors.Red
+            is UserMessage.Saved -> if (m.ltcMissing) BrutColors.Lamp else BrutColors.Level
+            is UserMessage.DeviceConnected, is UserMessage.Recovered -> BrutColors.Level
+            UserMessage.CaptureResumed, is UserMessage.MarkerAdded, UserMessage.MonitorNeedsHeadphones -> BrutColors.Lamp
+            else -> BrutColors.Clip
         }
+        val edge = BrutColors.Edge
         Text(
             text,
             style = BrutType.Body,
-            color = BrutColors.Cream,
+            color = BrutColors.Ink,
             modifier = Modifier
                 .padding(16.dp)
                 .padding(bottom = 96.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(BrutShapes.Plate))
-                .background(BrutColors.PanelRaised)
+                .clip(BrutShapes.PlateShape)
+                .background(BrutColors.PlateRaised)
+                .border(1.dp, edge, BrutShapes.PlateShape)
                 .semantics { liveRegion = LiveRegionMode.Polite }
                 .clickable(onClick = onDone)
                 .drawBehind { drawRect(accent, Offset.Zero, size.copy(width = 4.dp.toPx())) }

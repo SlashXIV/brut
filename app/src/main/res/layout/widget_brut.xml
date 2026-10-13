@@ -33,7 +33,7 @@
                 android:fontFamily="sans-serif-condensed"
                 android:letterSpacing="0.06"
                 android:text="@string/widget_brand"
-                android:textColor="@color/brut_cream"
+                android:textColor="@color/brut_ink"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -47,7 +47,7 @@
                 android:fontFamily="monospace"
                 android:maxLines="1"
                 android:text="@string/widget_format_preview"
-                android:textColor="@color/brut_amber"
+                android:textColor="@color/brut_accent"
                 android:textSize="11sp" />
 
             <TextView
@@ -60,7 +60,7 @@
                 android:paddingStart="6dp"
                 android:paddingEnd="6dp"
                 android:text="@string/widget_clip"
-                android:textColor="@color/brut_red"
+                android:textColor="@color/brut_clip"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -80,7 +80,7 @@
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:text="@string/widget_chrono_zero"
-                android:textColor="@color/brut_cream_faint"
+                android:textColor="@color/brut_ink_faint"
                 android:textSize="28sp" />
 
             <TextView
@@ -92,7 +92,7 @@
                 android:letterSpacing="0.12"
                 android:maxLines="1"
                 android:text="@string/widget_ready"
-                android:textColor="@color/brut_cream_dim"
+                android:textColor="@color/brut_ink_dim"
                 android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>

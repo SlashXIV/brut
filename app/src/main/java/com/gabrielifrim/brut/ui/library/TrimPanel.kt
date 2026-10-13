@@ -1,5 +1,13 @@
 package com.gabrielifrim.brut.ui.library
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import com.gabrielifrim.brut.ui.component.engraved
+import com.gabrielifrim.brut.ui.component.RackPlate
+import com.gabrielifrim.brut.ui.component.RotarySelector
+import com.gabrielifrim.brut.ui.component.ActionButton
+import com.gabrielifrim.brut.ui.component.Readout
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -30,10 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -52,15 +58,12 @@ import com.gabrielifrim.brut.library.Take
 import com.gabrielifrim.brut.library.TrimState
 import com.gabrielifrim.brut.library.Waveform
 import com.gabrielifrim.brut.library.depthName
-import com.gabrielifrim.brut.ui.console.ActionButton
-import com.gabrielifrim.brut.ui.console.RackPlate
-import com.gabrielifrim.brut.ui.console.Readout
-import com.gabrielifrim.brut.ui.console.RotarySelector
-import com.gabrielifrim.brut.ui.console.engraved
 import com.gabrielifrim.brut.ui.console.meterPosition
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.motion.rememberHaptics
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlin.math.abs
 
@@ -84,33 +87,54 @@ fun TrimPanel(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         TrimWaveform(info, trim, waveform, player.fraction, enabled = !busy, onSeek = actions::seek, onTrim = actions::setTrim)
         Row(verticalAlignment = Alignment.Bottom) {
-            Bound(stringResource(R.string.trim_in), formatDuration(trim.start / rate))
+            val total = info.frames.toFloat()
+            // IN et OUT se règlent aussi au balayage TalkBack, sans jamais se croiser.
+            Bound(stringResource(R.string.trim_in), formatDuration(trim.start / rate), fraction = trim.start / total) { f ->
+                actions.setTrim((f * total).toLong().coerceAtMost(trim.end - 1), trim.end)
+            }
             Spacer(Modifier.weight(1f))
-            Bound(stringResource(R.string.trim_length), formatDuration(trim.frames / rate), Alignment.CenterHorizontally, BrutColors.Cream)
+            Bound(stringResource(R.string.trim_length), formatDuration(trim.frames / rate), Alignment.CenterHorizontally, BrutColors.Ink)
             Spacer(Modifier.weight(1f))
-            Bound(stringResource(R.string.trim_out), formatDuration(trim.end / rate), Alignment.End)
+            Bound(stringResource(R.string.trim_out), formatDuration(trim.end / rate), Alignment.End, fraction = trim.end / total) { f ->
+                actions.setTrim(trim.start, (f * total).toLong().coerceAtLeast(trim.start + 1))
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton(stringResource(R.string.trim_in_here), BrutColors.Amber, Modifier.weight(1f), enabled = !busy) {
+            ActionButton(stringResource(R.string.trim_in_here), BrutColors.Accent, Modifier.weight(1f), enabled = !busy) {
                 actions.setTrim(player.positionFrames, trim.end)
             }
-            ActionButton(stringResource(R.string.trim_all), BrutColors.Cream, Modifier.weight(1f), enabled = !busy) {
+            ActionButton(stringResource(R.string.trim_all), BrutColors.Ink, Modifier.weight(1f), enabled = !busy) {
                 actions.setTrim(0, info.frames)
             }
-            ActionButton(stringResource(R.string.trim_out_here), BrutColors.Amber, Modifier.weight(1f), enabled = !busy) {
+            ActionButton(stringResource(R.string.trim_out_here), BrutColors.Accent, Modifier.weight(1f), enabled = !busy) {
                 actions.setTrim(trim.start, player.positionFrames)
             }
         }
         PlaybackRow(take, player, enabled = !recording && !busy, actions)
-        Text(stringResource(R.string.trim_hint), style = BrutType.Body, color = BrutColors.CreamDim)
+        Text(stringResource(R.string.trim_hint), style = BrutType.Body, color = BrutColors.InkDim)
         ExportControls(take, info, trim, exportProgress, recording, actions)
     }
 }
 
 @Composable
-private fun Bound(legend: String, value: String, align: Alignment.Horizontal = Alignment.Start, color: Color = BrutColors.Amber) {
-    Column(horizontalAlignment = align) {
-        Text(legend.uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+private fun Bound(
+    legend: String,
+    value: String,
+    align: Alignment.Horizontal = Alignment.Start,
+    color: Color = BrutColors.Accent,
+    fraction: Float? = null,
+    onAdjust: ((Float) -> Unit)? = null,
+) {
+    Column(
+        Modifier.semantics(mergeDescendants = true) {
+            if (fraction != null && onAdjust != null) {
+                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f, steps = 99)
+                setProgress { onAdjust(it.coerceIn(0f, 1f)); true }
+            }
+        },
+        horizontalAlignment = align,
+    ) {
+        Text(legend.uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
         Readout(value, color = color)
     }
 }
@@ -131,7 +155,8 @@ private fun TrimWaveform(
     onTrim: (Long, Long) -> Unit,
 ) {
     val description = stringResource(R.string.trim_waveform)
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
+    val p = BrutColors.palette
     val current by rememberUpdatedState(trim)
     val total = info.frames.toFloat()
     val markers = info.markers.map { it.frame }
@@ -139,8 +164,8 @@ private fun TrimWaveform(
         Modifier
             .fillMaxWidth()
             .height(96.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color(0xFF0B0A08))
+            .clip(BrutShapes.InsetShape)
+            .background(p.display)
             .semantics { contentDescription = description }
             .pointerInput(enabled) {
                 if (enabled) detectTapGestures { onSeek(it.x / size.width) }
@@ -167,7 +192,7 @@ private fun TrimWaveform(
                             dOut <= grab -> 2
                             else -> 3
                         }
-                        if (handle != 3) haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                        if (handle != 3) haptics.detent()
                     },
                 ) { change, _ ->
                     change.consume()
@@ -183,36 +208,37 @@ private fun TrimWaveform(
         val mid = size.height / 2
         val inX = trim.start / total * size.width
         val outX = trim.end / total * size.width
-        drawLine(BrutColors.CreamFaint.copy(alpha = 0.4f), Offset(0f, mid), Offset(size.width, mid), 1f)
+        drawLine(p.inkFaint.copy(alpha = 0.4f), Offset(0f, mid), Offset(size.width, mid), 1f)
         waveform?.peaks?.let { peaks ->
             val step = size.width / peaks.size
-            peaks.forEachIndexed { i, p ->
-                val h = meterPosition(LevelMeter.toDb(p)) * (mid - 2.dp.toPx())
+            peaks.forEachIndexed { i, peak ->
+                val h = meterPosition(LevelMeter.toDb(peak)) * (mid - 2.dp.toPx())
                 val x = i * step
                 val inside = x + step >= inX && x <= outX
                 val color = when {
-                    p >= LevelMeter.CLIP_LINEAR -> BrutColors.Red
-                    inside -> BrutColors.Amber
-                    else -> BrutColors.CreamFaint
+                    peak >= LevelMeter.CLIP_LINEAR -> p.clip
+                    inside -> p.accent
+                    else -> p.inkFaint
                 }
                 drawRect(color, Offset(x, mid - h), Size(maxOf(step - 1f, 1f), h * 2))
             }
         }
-        // Hors sélection : voilé, comme un fader à fond.
-        drawRect(Color.Black.copy(alpha = 0.55f), Offset.Zero, Size(inX, size.height))
-        drawRect(Color.Black.copy(alpha = 0.55f), Offset(outX, 0f), Size(size.width - outX, size.height))
+        // Hors sélection : voilé de la teinte du fond, comme un fader à fond.
+        val veil = p.display.copy(alpha = 0.7f)
+        drawRect(veil, Offset.Zero, Size(inX, size.height))
+        drawRect(veil, Offset(outX, 0f), Size(size.width - outX, size.height))
         markers.forEach { m ->
             val mx = m / total * size.width
-            drawLine(BrutColors.Cream.copy(alpha = 0.5f), Offset(mx, 0f), Offset(mx, size.height), 1.dp.toPx())
+            drawLine(p.ink.copy(alpha = 0.5f), Offset(mx, 0f), Offset(mx, size.height), 1.dp.toPx())
         }
         // Poignées : un trait et une languette tournée vers l'intérieur de la sélection.
         val tab = Size(10.dp.toPx(), 18.dp.toPx())
-        drawLine(BrutColors.Amber, Offset(inX, 0f), Offset(inX, size.height), 2.dp.toPx())
-        drawRect(BrutColors.Amber, Offset(inX, size.height - tab.height), tab)
-        drawLine(BrutColors.Amber, Offset(outX, 0f), Offset(outX, size.height), 2.dp.toPx())
-        drawRect(BrutColors.Amber, Offset(outX - tab.width, size.height - tab.height), tab)
+        drawLine(p.accent, Offset(inX, 0f), Offset(inX, size.height), 2.dp.toPx())
+        drawRect(p.accent, Offset(inX, size.height - tab.height), tab)
+        drawLine(p.accent, Offset(outX, 0f), Offset(outX, size.height), 2.dp.toPx())
+        drawRect(p.accent, Offset(outX - tab.width, size.height - tab.height), tab)
         val x = fraction * size.width
-        drawLine(BrutColors.Cream, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
+        drawLine(p.ink, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
     }
 }
 
@@ -243,7 +269,7 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
     val busy = exportProgress != null
     val enabled = !busy && !recording
 
-    Text(stringResource(R.string.export_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+    Text(stringResource(R.string.export_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             val original = stringResource(R.string.export_original)
@@ -319,32 +345,32 @@ private fun ExportControls(take: Take, info: WavInfo, trim: TrimState, exportPro
         }
         add(stringResource(R.string.export_hint_original))
     }
-    hints.forEach { Text(it, style = BrutType.Body, color = BrutColors.CreamDim) }
-    if (recording) Text(stringResource(R.string.export_busy), style = BrutType.Body, color = BrutColors.Amber)
+    hints.forEach { Text(it, style = BrutType.Body, color = BrutColors.InkDim) }
+    if (recording) Text(stringResource(R.string.export_busy), style = BrutType.Body, color = BrutColors.Accent)
 
     if (exportProgress != null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Readout(stringResource(R.string.export_running, (exportProgress * 100).toInt()))
                 Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(BrutColors.Recess)) {
-                    Box(Modifier.fillMaxWidth(exportProgress.coerceIn(0f, 1f)).height(4.dp).background(BrutColors.Amber))
+                Box(Modifier.fillMaxWidth().height(4.dp).clip(BrutShapes.InsetShape).background(BrutColors.Recess)) {
+                    Box(Modifier.fillMaxWidth(exportProgress.coerceIn(0f, 1f)).height(4.dp).background(BrutColors.Accent))
                 }
             }
             Spacer(Modifier.width(12.dp))
-            ActionButton(stringResource(R.string.export_cancel), BrutColors.Red, Modifier.width(110.dp), onClick = actions::cancelExport)
+            ActionButton(stringResource(R.string.export_cancel), BrutColors.Clip, Modifier.width(110.dp), onClick = actions::cancelExport)
         }
     } else {
         // L'un sous l'autre : les libellés restent entiers sur les écrans étroits.
-        ActionButton(stringResource(R.string.export_selection), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = enabled) {
+        ActionButton(stringResource(R.string.export_selection), BrutColors.Accent, Modifier.fillMaxWidth(), enabled = enabled) {
             actions.export(take, depth, channels, rate, split = false)
         }
         if (segments > 1) {
-            ActionButton(stringResource(R.string.export_split, segments), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = enabled) {
+            ActionButton(stringResource(R.string.export_split, segments), BrutColors.Accent, Modifier.fillMaxWidth(), enabled = enabled) {
                 actions.export(take, depth, channels, rate, split = true)
             }
         }
-        ActionButton(stringResource(R.string.export_close), BrutColors.CreamDim, Modifier.fillMaxWidth(), onClick = actions::endTrim)
+        ActionButton(stringResource(R.string.export_close), BrutColors.InkDim, Modifier.fillMaxWidth(), onClick = actions::endTrim)
     }
 }
 
@@ -356,20 +382,20 @@ fun PlaybackRow(take: Take, player: PlayerState, enabled: Boolean, actions: Libr
         Spacer(Modifier.width(12.dp))
         Row(
             Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(BrutShapes.InsetShape)
                 .toggleable(value = player.loop, role = Role.Switch, onValueChange = actions::setLoop)
                 .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            com.gabrielifrim.brut.ui.console.Lamp(BrutColors.Amber, lit = player.loop)
+            com.gabrielifrim.brut.ui.console.Lamp(BrutColors.Accent, lit = player.loop)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.library_loop).uppercase(), style = engraved(BrutType.Legend), color = if (player.loop) BrutColors.Cream else BrutColors.CreamDim)
+            Text(stringResource(R.string.library_loop).uppercase(), style = engraved(BrutType.Legend), color = if (player.loop) BrutColors.Ink else BrutColors.InkDim)
         }
         Spacer(Modifier.weight(1f))
         Readout(
             formatDuration(player.positionSeconds, withHundredths = false) + " / " +
                 formatDuration(take.info?.durationSeconds ?: 0.0, withHundredths = false),
-            color = BrutColors.Cream,
+            color = BrutColors.Ink,
         )
     }
 }

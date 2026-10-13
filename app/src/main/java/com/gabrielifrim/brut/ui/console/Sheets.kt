@@ -1,5 +1,11 @@
 package com.gabrielifrim.brut.ui.console
 
+import com.gabrielifrim.brut.ui.component.engraved
+import com.gabrielifrim.brut.ui.component.PlateTitle
+import com.gabrielifrim.brut.ui.component.RackPlate
+import com.gabrielifrim.brut.ui.component.RotarySelector
+import com.gabrielifrim.brut.ui.component.ActionButton
+import com.gabrielifrim.brut.ui.component.Readout
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +27,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +55,14 @@ import com.gabrielifrim.brut.device.InputDevice
 import com.gabrielifrim.brut.device.InputKind
 import com.gabrielifrim.brut.ui.formatBytes
 import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.storage.Appearance
+import com.gabrielifrim.brut.ui.component.LampSelector
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
+import com.gabrielifrim.brut.ui.theme.Palettes
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.gabrielifrim.brut.ui.theme.BrutType
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -56,12 +70,15 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BrutSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    // Une plaque qui glisse depuis le bas : même rayon que tout ce qui est fixé, poignée crantée.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = BrutColors.Panel,
-        contentColor = BrutColors.Cream,
-        scrimColor = BrutColors.Graphite.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(topStart = BrutShapes.Plate, topEnd = BrutShapes.Plate),
+        containerColor = BrutColors.Plate,
+        contentColor = BrutColors.Ink,
+        scrimColor = BrutColors.FacadeDeep.copy(alpha = 0.72f),
+        dragHandle = { Grip() },
     ) {
         Column(
             Modifier
@@ -70,6 +87,78 @@ internal fun BrutSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
                 .padding(bottom = 24.dp)
                 .navigationBarsPadding(),
         ) { content() }
+    }
+}
+
+/** Poignée de feuille : une rangée de crans, comme la prise d'un tiroir de rack. */
+@Composable
+private fun Grip() {
+    val notch = BrutColors.InkFaint
+    Canvas(Modifier.padding(vertical = 12.dp).size(width = 36.dp, height = 4.dp)) {
+        val step = 4.dp.toPx()
+        var x = 0f
+        while (x < size.width) {
+            drawRect(notch, Offset(x, 0f), androidx.compose.ui.geometry.Size(2.dp.toPx(), size.height))
+            x += step
+        }
+    }
+}
+
+/**
+ * Affichage : palette et mouvement. Si Android supprime les animations, le choix du
+ * mouvement est grisé : le réglage du système l'emporte, et on le dit.
+ */
+@Composable
+fun DisplaySheet(
+    appearance: Appearance,
+    systemMotionOff: Boolean,
+    onPalette: (String) -> Unit,
+    onSober: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BrutSheet(onDismiss) {
+        PlateTitle(stringResource(R.string.display_title))
+        Spacer(Modifier.height(18.dp))
+        Text(stringResource(R.string.display_palette).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
+        Spacer(Modifier.height(8.dp))
+        val choices = listOf(Palettes.AUTO) + Palettes.all.map { it.id }
+        LampSelector(
+            options = choices,
+            selected = choices.firstOrNull { it == appearance.palette } ?: Palettes.AUTO,
+            label = { id -> Palettes.all.firstOrNull { it.id == id }?.let { stringResource(it.nameRes) } ?: stringResource(R.string.palette_auto) },
+            onSelect = onPalette,
+            extra = { id -> PaletteSwatch(id) },
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.display_palette_hint), style = BrutType.Body, color = BrutColors.InkDim)
+        Spacer(Modifier.height(20.dp))
+        Text(stringResource(R.string.display_motion).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
+        Spacer(Modifier.height(8.dp))
+        LampSelector(
+            options = listOf(false, true),
+            selected = appearance.sober,
+            label = { sober -> stringResource(if (sober) R.string.motion_sober else R.string.motion_expressive) },
+            onSelect = onSober,
+            enabled = !systemMotionOff,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            stringResource(if (systemMotionOff) R.string.display_motion_system else R.string.display_motion_hint),
+            style = BrutType.Body, color = BrutColors.InkDim,
+        )
+    }
+}
+
+/** Deux pastilles : la façade et la lampe de la palette (ou des deux, en automatique). */
+@Composable
+private fun PaletteSwatch(id: String) {
+    val pair = Palettes.all.firstOrNull { it.id == id }?.let { listOf(it.facade, it.lamp) }
+        ?: listOf(Palettes.Scene.facade, Palettes.PleinJour.facade)
+    val edge = BrutColors.Edge
+    Row(Modifier.clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        pair.forEach { c ->
+            Box(Modifier.size(10.dp).clip(BrutShapes.InsetShape).background(c).border(1.dp, edge, BrutShapes.InsetShape))
+        }
     }
 }
 
@@ -86,10 +175,10 @@ fun FormatSheet(
     onDismiss: () -> Unit,
 ) {
     BrutSheet(onDismiss) {
-        Text(stringResource(R.string.take_settings_title), style = BrutType.Title)
-        Text(stringResource(R.string.format_subtitle), style = BrutType.Body, color = BrutColors.CreamDim)
+        PlateTitle(stringResource(R.string.take_settings_title))
+        Text(stringResource(R.string.format_subtitle), style = BrutType.Body, color = BrutColors.InkDim)
         if (locked) {
-            Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Accent, modifier = Modifier.padding(top = 8.dp))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -145,22 +234,22 @@ fun FormatSheet(
                     BitDepth.FLOAT_32 -> R.string.format_hint_32f
                 },
             ),
-            style = BrutType.Body, color = BrutColors.CreamDim,
+            style = BrutType.Body, color = BrutColors.InkDim,
         )
         val anyForeign = device != null && (
             AudioFormatSpec.SUPPORTED_SAMPLE_RATES.any { !device.supportsRate(it) } || !device.supportsChannels(2)
         )
         if (anyForeign) {
-            Text(stringResource(R.string.format_not_native), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.format_not_native), style = BrutType.Body, color = BrutColors.InkDim, modifier = Modifier.padding(top = 8.dp))
         }
         if (format.channels == 2 && device != null && !device.supportsChannels(2)) {
-            Text(stringResource(R.string.warning_mono_input), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.warning_mono_input), style = BrutType.Body, color = BrutColors.Accent, modifier = Modifier.padding(top = 8.dp))
         }
 
         Spacer(Modifier.height(16.dp))
         Text(
             stringResource(R.string.format_data_rate, formatBytes(format.bytesPerSecond * 60)),
-            style = BrutType.Readout, color = BrutColors.CreamDim,
+            style = BrutType.Readout, color = BrutColors.InkDim,
         )
 
         ToolsSection(options, headphones, locked, onOptions, channels = format.channels)
@@ -185,17 +274,17 @@ fun SourceSheet(
     onForgetRecipe: () -> Unit = {},
 ) {
     BrutSheet(onDismiss) {
-        Text(stringResource(R.string.source_pick_title), style = BrutType.Title)
-        Text(stringResource(R.string.source_pick_hint), style = BrutType.Body, color = BrutColors.CreamDim)
+        PlateTitle(stringResource(R.string.source_pick_title))
+        Text(stringResource(R.string.source_pick_hint), style = BrutType.Body, color = BrutColors.InkDim)
         if (locked) {
-            Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Amber, modifier = Modifier.padding(top = 8.dp))
+            Text(stringResource(R.string.format_locked), style = BrutType.Body, color = BrutColors.Accent, modifier = Modifier.padding(top = 8.dp))
         }
 
         SheetLegend(stringResource(R.string.source_section_inputs))
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
             Column {
                 if (devices.isEmpty()) {
-                    Text(stringResource(R.string.source_none), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(8.dp))
+                    Text(stringResource(R.string.source_none), style = BrutType.Body, color = BrutColors.InkDim, modifier = Modifier.padding(8.dp))
                 }
                 devices.forEachIndexed { i, device ->
                     if (i > 0) EngravedRule()
@@ -216,19 +305,19 @@ fun SourceSheet(
             if (recipe != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.source_recipe, recipeLabel(recipe)), style = BrutType.Body, color = BrutColors.Green)
+                        Text(stringResource(R.string.source_recipe, recipeLabel(recipe)), style = BrutType.Body, color = BrutColors.Level)
                         if (captureMode != null) {
-                            Text(stringResource(R.string.source_recipe_manual), style = BrutType.Body, color = BrutColors.CreamDim)
+                            Text(stringResource(R.string.source_recipe_manual), style = BrutType.Body, color = BrutColors.InkDim)
                         }
                     }
                     Spacer(Modifier.width(8.dp))
-                    ActionButton(stringResource(R.string.source_recipe_forget), BrutColors.Cream, Modifier.width(96.dp), enabled = !locked, onClick = onForgetRecipe)
+                    ActionButton(stringResource(R.string.source_recipe_forget), BrutColors.Ink, Modifier.width(96.dp), enabled = !locked, onClick = onForgetRecipe)
                 }
                 Spacer(Modifier.height(8.dp))
             }
             if (canTest) {
-                ActionButton(stringResource(R.string.source_test), BrutColors.Amber, Modifier.fillMaxWidth(), enabled = !locked, onClick = onTest)
-                Text(stringResource(R.string.source_test_hint), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 6.dp))
+                ActionButton(stringResource(R.string.source_test), BrutColors.Accent, Modifier.fillMaxWidth(), enabled = !locked, onClick = onTest)
+                Text(stringResource(R.string.source_test_hint), style = BrutType.Body, color = BrutColors.InkDim, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
@@ -246,19 +335,19 @@ fun SourceSheet(
                     val available = mode != CaptureSource.UNPROCESSED || unprocessedSupported
                     RackRow(
                         selected = captureMode == mode,
-                        lampColor = BrutColors.Amber,
+                        lampColor = BrutColors.Accent,
                         enabled = !locked && available,
                         onClick = { onCaptureMode(mode) },
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(title).uppercase(), style = engraved(BrutType.Legend), color = if (available) BrutColors.Cream else BrutColors.CreamFaint)
+                            Text(stringResource(title).uppercase(), style = engraved(BrutType.Legend), color = if (available) BrutColors.Ink else BrutColors.InkFaint)
                             if (mode != null && mode == activeSource) {
-                                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Green)
+                                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Level)
                             }
                         }
                         Text(
                             stringResource(if (available) hint else R.string.capture_mode_raw_missing),
-                            style = BrutType.Body, color = BrutColors.CreamDim,
+                            style = BrutType.Body, color = BrutColors.InkDim,
                         )
                     }
                 }
@@ -273,7 +362,7 @@ fun SourceSheet(
  */
 @Composable
 private fun PresetRow(active: Preset?, enabled: Boolean, onPreset: (Preset) -> Unit) {
-    Text(stringResource(R.string.presets_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+    Text(stringResource(R.string.presets_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Preset.entries.forEach { p ->
@@ -281,22 +370,22 @@ private fun PresetRow(active: Preset?, enabled: Boolean, onPreset: (Preset) -> U
             Column(
                 Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (lit) BrutColors.PanelRaised else BrutColors.Recess)
+                    .clip(BrutShapes.InsetShape)
+                    .background(if (lit) BrutColors.PlateRaised else BrutColors.Recess)
                     .clickable(enabled = enabled, role = Role.RadioButton) { onPreset(p) }
                     .semantics { selected = lit }
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Lamp(BrutColors.Amber, lit = lit)
+                Lamp(BrutColors.Accent, lit = lit)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     presetName(p).uppercase(),
                     style = engraved(BrutType.Legend),
                     color = when {
-                        !enabled -> BrutColors.CreamFaint
-                        lit -> BrutColors.Cream
-                        else -> BrutColors.CreamDim
+                        !enabled -> BrutColors.InkFaint
+                        lit -> BrutColors.Ink
+                        else -> BrutColors.InkDim
                     },
                     maxLines = 1,
                 )
@@ -307,7 +396,7 @@ private fun PresetRow(active: Preset?, enabled: Boolean, onPreset: (Preset) -> U
     Text(
         active?.let { presetHint(it) } ?: stringResource(R.string.presets_none),
         style = BrutType.Body,
-        color = BrutColors.CreamDim,
+        color = BrutColors.InkDim,
     )
 }
 
@@ -336,7 +425,7 @@ private fun SheetLegend(text: String) {
     Text(
         text.uppercase(),
         style = engraved(BrutType.Legend),
-        color = BrutColors.CreamDim,
+        color = BrutColors.InkDim,
         modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
     )
 }
@@ -344,13 +433,14 @@ private fun SheetLegend(text: String) {
 /** Filet gravé entre deux rangées d'une même plaque. */
 @Composable
 private fun EngravedRule() {
+    val p = BrutColors.palette
     Box(
         Modifier
             .fillMaxWidth()
             .height(2.dp)
             .drawBehind {
-                drawLine(Color.Black.copy(alpha = 0.6f), Offset(0f, 0f), Offset(size.width, 0f), 1f)
-                drawLine(Color.White.copy(alpha = 0.06f), Offset(0f, 1.5f), Offset(size.width, 1.5f), 1f)
+                drawLine(p.shadow.copy(alpha = if (p.isDark) 0.6f else 0.2f), Offset(0f, 0f), Offset(size.width, 0f), 1f)
+                drawLine(p.highlight.copy(alpha = if (p.isDark) 0.06f else 0.8f), Offset(0f, 1.5f), Offset(size.width, 1.5f), 1f)
             },
     )
 }
@@ -367,8 +457,8 @@ private fun RackRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(3.dp))
-            .background(if (selected) BrutColors.Amber.copy(alpha = 0.07f) else Color.Transparent)
+            .clip(BrutShapes.InsetShape)
+            .background(if (selected) BrutColors.Accent.copy(alpha = 0.07f) else Color.Transparent)
             .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -381,17 +471,17 @@ private fun RackRow(
 
 @Composable
 private fun DeviceRow(device: InputDevice, selected: Boolean, routed: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    RackRow(selected || routed, if (routed) BrutColors.Green else BrutColors.Amber, enabled, onClick) {
+    RackRow(selected || routed, if (routed) BrutColors.Level else BrutColors.Accent, enabled, onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(kindLabel(device.kind).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Amber)
+            Text(kindLabel(device.kind).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Accent)
             if (routed) {
-                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Green)
+                Text("  \u00B7 " + stringResource(R.string.source_active), style = engraved(BrutType.Legend), color = BrutColors.Level)
             }
         }
-        Text(deviceName(device), style = engraved(BrutType.BodyStrong), color = if (selected) BrutColors.Cream else BrutColors.CreamDim)
-        Text(deviceDetails(device), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim)
+        Text(deviceName(device), style = engraved(BrutType.BodyStrong), color = if (selected) BrutColors.Ink else BrutColors.InkDim)
+        Text(deviceDetails(device), style = BrutType.ReadoutSmall, color = BrutColors.InkDim)
         if (device.kind == InputKind.BLUETOOTH) {
-            Text(stringResource(R.string.device_bluetooth_warning), style = BrutType.Body, color = BrutColors.Amber)
+            Text(stringResource(R.string.device_bluetooth_warning), style = BrutType.Body, color = BrutColors.Accent)
         }
     }
 }
@@ -439,7 +529,7 @@ private fun deviceDetails(device: InputDevice): String {
 private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Boolean, onOptions: (TakeOptions) -> Unit, channels: Int = 2) {
     val off = stringResource(R.string.tools_off)
     Spacer(Modifier.height(22.dp))
-    Text(stringResource(R.string.tools_title), style = BrutType.Title)
+    PlateTitle(stringResource(R.string.tools_title))
     Spacer(Modifier.height(12.dp))
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -475,19 +565,19 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
+            .clip(BrutShapes.InsetShape)
             .background(BrutColors.Recess)
             .toggleable(value = options.monitor, enabled = !locked, role = Role.Switch) { onOptions(options.copy(monitor = it)) }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Lamp(BrutColors.Amber, lit = options.monitor)
+        Lamp(BrutColors.Accent, lit = options.monitor)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.tools_monitor).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Cream)
+            Text(stringResource(R.string.tools_monitor).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.Ink)
             Text(
                 stringResource(if (headphones) R.string.tools_monitor_hint else R.string.warning_monitor_no_headphones),
-                style = BrutType.Body, color = if (headphones) BrutColors.CreamDim else BrutColors.Amber,
+                style = BrutType.Body, color = if (headphones) BrutColors.InkDim else BrutColors.Accent,
             )
         }
     }
@@ -497,7 +587,7 @@ private fun ToolsSection(options: TakeOptions, headphones: Boolean, locked: Bool
         R.string.tools_safety_hint,
         R.string.tools_trigger_hint,
     ).forEach {
-        Text(stringResource(it), style = BrutType.Body, color = BrutColors.CreamDim, modifier = Modifier.padding(top = 4.dp))
+        Text(stringResource(it), style = BrutType.Body, color = BrutColors.InkDim, modifier = Modifier.padding(top = 4.dp))
     }
     TimecodeSection(options, channels, locked, onOptions)
 }
@@ -511,7 +601,7 @@ private fun TimecodeSection(options: TakeOptions, channels: Int, locked: Boolean
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val decimal = java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator
     Spacer(Modifier.height(22.dp))
-    Text(stringResource(R.string.tc_title), style = BrutType.Title)
+    PlateTitle(stringResource(R.string.tc_title))
     Spacer(Modifier.height(12.dp))
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 8.dp) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -548,14 +638,16 @@ private fun TimecodeSection(options: TakeOptions, channels: Int, locked: Boolean
         }
     }
     Spacer(Modifier.height(10.dp))
-    Text(stringResource(R.string.tc_hint), style = BrutType.Body, color = BrutColors.CreamDim)
+    Text(stringResource(R.string.tc_hint), style = BrutType.Body, color = BrutColors.InkDim)
 }
 
 /** Niveau d'alerte d'un relevé du moteur : ambre dès la moitié, rouge à la moindre perte. */
+@Composable
+@ReadOnlyComposable
 fun engineColor(stats: EngineStats.Snapshot): Color = when {
-    stats.lostFrames > 0 -> BrutColors.Red
-    stats.dspPeak > 0.5f || (stats.bufferFill ?: 0f) > 0.5f -> BrutColors.Amber
-    else -> BrutColors.CreamDim
+    stats.lostFrames > 0 -> BrutColors.Clip
+    stats.dspPeak > 0.5f || (stats.bufferFill ?: 0f) > 0.5f -> BrutColors.Accent
+    else -> BrutColors.InkDim
 }
 
 @Composable
@@ -570,11 +662,11 @@ private fun oneDecimal(v: Float) = String.format(Locale.getDefault(), "%.1f", v)
 @Composable
 fun EngineSheet(stats: EngineStats.Snapshot?, recording: Boolean, onDismiss: () -> Unit) {
     BrutSheet(onDismiss) {
-        Text(stringResource(R.string.engine_title), style = BrutType.Title)
-        Text(stringResource(R.string.engine_subtitle), style = BrutType.Body, color = BrutColors.CreamDim)
+        PlateTitle(stringResource(R.string.engine_title))
+        Text(stringResource(R.string.engine_subtitle), style = BrutType.Body, color = BrutColors.InkDim)
         Spacer(Modifier.height(16.dp))
         if (stats == null) {
-            Text(stringResource(R.string.engine_waiting), style = BrutType.Body, color = BrutColors.CreamDim)
+            Text(stringResource(R.string.engine_waiting), style = BrutType.Body, color = BrutColors.InkDim)
             return@BrutSheet
         }
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 12.dp) {
@@ -607,7 +699,7 @@ fun EngineSheet(stats: EngineStats.Snapshot?, recording: Boolean, onDismiss: () 
                     if (stats.lostFrames == 0L) stringResource(R.string.engine_loss_none)
                     else stringResource(R.string.engine_loss_value, oneDecimal(stats.lostMs)),
                     stringResource(R.string.engine_loss_hint),
-                    if (stats.lostFrames > 0) BrutColors.Red else BrutColors.Amber,
+                    if (stats.lostFrames > 0) BrutColors.Clip else BrutColors.Accent,
                 )
             }
         }
@@ -615,13 +707,13 @@ fun EngineSheet(stats: EngineStats.Snapshot?, recording: Boolean, onDismiss: () 
 }
 
 @Composable
-private fun EngineRow(label: String, value: String, hint: String, color: Color = BrutColors.Amber) {
+private fun EngineRow(label: String, value: String, hint: String, color: Color = BrutColors.Accent) {
     Column(Modifier.semantics(mergeDescendants = true) {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = engraved(BrutType.Legend), color = BrutColors.CreamDim, modifier = Modifier.weight(1f))
+            Text(label, style = engraved(BrutType.Legend), color = BrutColors.InkDim, modifier = Modifier.weight(1f))
             Readout(value, color = color)
         }
         Spacer(Modifier.height(4.dp))
-        Text(hint, style = BrutType.Body, color = BrutColors.CreamDim)
+        Text(hint, style = BrutType.Body, color = BrutColors.InkDim)
     }
 }

@@ -1,5 +1,6 @@
 package com.gabrielifrim.brut
 
+import com.gabrielifrim.brut.ui.component.chassis
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -61,15 +62,32 @@ import androidx.compose.runtime.LaunchedEffect
 import com.gabrielifrim.brut.service.RecordingService
 import com.gabrielifrim.brut.ui.console.ConsoleActions
 import com.gabrielifrim.brut.ui.console.ConsoleScreen
-import com.gabrielifrim.brut.ui.console.chassis
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutTheme
+import com.gabrielifrim.brut.ui.theme.BrutShapes
+import com.gabrielifrim.brut.ui.theme.Palettes
+import com.gabrielifrim.brut.ui.theme.legibleOn
+import com.gabrielifrim.brut.ui.console.calm
+import com.gabrielifrim.brut.ui.motion.motionLevelOf
+import com.gabrielifrim.brut.ui.motion.rememberAnimatorScale
+import com.gabrielifrim.brut.storage.SettingsStore
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.gabrielifrim.brut.ui.theme.BrutType
 
 class MainActivity : ComponentActivity() {
 
     private val controller: RecorderController get() = (application as BrutApp).controller
     private val library: LibraryController get() = (application as BrutApp).library
+    private val settings by lazy { SettingsStore(applicationContext) }
 
     /** Écran affiché : la console ou la bibliothèque des prises. */
     private var screen by mutableStateOf(Screen.CONSOLE)
@@ -83,13 +101,22 @@ class MainActivity : ComponentActivity() {
         registerLaunchers()
         savedInstanceState?.getString(KEY_SCREEN)?.let { screen = Screen.valueOf(it) }
         if (savedInstanceState == null) handleShortcut(intent)
-        // Console toujours sombre : icônes claires quel que soit le thème du système.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-        )
+        // Bord à bord dès la première image ; les icônes suivent ensuite la palette (ci-dessous).
+        enableEdgeToEdge()
         setContent {
-            BrutTheme {
+            // Rien n'est dessiné avant la lecture des réglages (quelques millisecondes, le fond de
+            // fenêtre reste visible) : sinon chaque lancement passerait en fondu de la palette par
+            // défaut à celle choisie.
+            val appearance = settings.appearance.collectAsStateWithLifecycle(null).value ?: return@setContent
+            val palette = Palettes.resolve(appearance.palette, isSystemInDarkTheme())
+            val animatorScale = rememberAnimatorScale()
+            // Icônes des barres système accordées à la palette, pas au thème du téléphone.
+            LaunchedEffect(palette.isDark) {
+                val transparent = android.graphics.Color.TRANSPARENT
+                val style = if (palette.isDark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            BrutTheme(palette = palette, motion = motionLevelOf(animatorScale, appearance.sober)) {
                 var granted by remember { mutableStateOf(hasMicPermission()) }
                 val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
                     granted = hasMicPermission()
@@ -107,9 +134,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (granted) {
-                    val state by controller.state.collectAsStateWithLifecycle()
+                    // Deux lectures du même état : la console suit l'état calme, les instruments l'état vivant.
+                    val live = controller.state.collectAsStateWithLifecycle()
+                    val state by remember { derivedStateOf { live.value.calm() } }
                     when (screen) {
-                        Screen.CONSOLE -> ConsoleScreen(state, actions)
+                        Screen.CONSOLE -> ConsoleScreen(state, live, appearance, animatorScale == 0f, actions)
                         Screen.LIBRARY -> {
                             val lib by library.state.collectAsStateWithLifecycle()
                             val player by library.player.state.collectAsStateWithLifecycle()
@@ -237,6 +266,12 @@ class MainActivity : ComponentActivity() {
         override fun closeChannelTest() = controller.closeChannelTest()
         override fun applyRecipe(recipe: com.gabrielifrim.brut.audio.CaptureRecipe) = controller.applyRecipe(recipe)
         override fun forgetRecipe() = controller.forgetRecipe()
+        override fun setPalette(id: String) {
+            lifecycleScope.launch { settings.setPalette(id) }
+        }
+        override fun setSober(sober: Boolean) {
+            lifecycleScope.launch { settings.setSober(sober) }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -271,23 +306,25 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("B", style = BrutType.Clock.copy(fontSize = BrutType.Clock.fontSize * 1.6f), color = BrutColors.Cream)
-            Box(Modifier.width(48.dp).height(3.dp).background(BrutColors.Amber))
-            Text(stringResource(R.string.permission_title), style = BrutType.Title, color = BrutColors.Cream, textAlign = TextAlign.Center)
-            Text(stringResource(R.string.permission_body), style = BrutType.Body, color = BrutColors.CreamDim, textAlign = TextAlign.Center)
+            // Le monogramme de l'icône : la lettre, puis le trait ambre.
+            Text(stringResource(R.string.app_name).take(1), style = BrutType.Clock.copy(fontSize = BrutType.Clock.fontSize * 1.6f), color = BrutColors.Ink, modifier = Modifier.clearAndSetSemantics {})
+            Box(Modifier.width(48.dp).height(3.dp).background(BrutColors.Lamp))
+            Text(stringResource(R.string.permission_title), style = BrutType.Title, color = BrutColors.Ink, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+            Text(stringResource(R.string.permission_body), style = BrutType.Body, color = BrutColors.InkDim, textAlign = TextAlign.Center)
             val label = stringResource(if (asked) R.string.permission_settings else R.string.permission_grant)
+            val lamp = BrutColors.Lamp
             Text(
-                label,
-                style = BrutType.BodyStrong,
-                color = BrutColors.Graphite,
+                label.uppercase(),
+                style = BrutType.Action.copy(fontSize = 15.sp),
+                color = legibleOn(lamp),
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .padding(top = 12.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(BrutColors.Amber)
-                    .border(1.dp, BrutColors.Amber, RoundedCornerShape(12.dp))
-                    .clickable {
+                    .heightIn(min = 52.dp)
+                    .clip(BrutShapes.InsetShape)
+                    .background(lamp)
+                    .clickable(role = Role.Button) {
                         if (asked) {
                             // Après un refus définitif, Android ne redemande plus : on ouvre les réglages.
                             context.startActivity(

@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Brut" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/brut_graphite</item>
+        <item name="android:windowBackground">@color/brut_facade</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <!-- Lancement rapide : rien à l'écran, l'activité se ferme dès la prise lancée. -->

@@ -1,5 +1,10 @@
 package com.gabrielifrim.brut.ui.console
 
+import com.gabrielifrim.brut.ui.component.engraved
+import com.gabrielifrim.brut.ui.component.PlateTitle
+import com.gabrielifrim.brut.ui.component.RackPlate
+import com.gabrielifrim.brut.ui.component.ActionButton
+import com.gabrielifrim.brut.ui.component.Readout
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -14,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,11 +81,13 @@ private fun outcomeText(context: Context, o: ProbeOutcome): String = context.get
     },
 )
 
+@Composable
+@ReadOnlyComposable
 private fun outcomeColor(o: ProbeOutcome): Color = when (o) {
-    ProbeOutcome.SEPARATED -> BrutColors.Green
-    ProbeOutcome.MIXED -> BrutColors.Red
-    ProbeOutcome.SILENT, ProbeOutcome.REROUTED -> BrutColors.Amber
-    ProbeOutcome.REFUSED -> BrutColors.CreamFaint
+    ProbeOutcome.SEPARATED -> BrutColors.Level
+    ProbeOutcome.MIXED -> BrutColors.Clip
+    ProbeOutcome.SILENT, ProbeOutcome.REROUTED -> BrutColors.Accent
+    ProbeOutcome.REFUSED -> BrutColors.InkFaint
 }
 
 private fun levelsText(context: Context, r: PairReading): String = context.getString(
@@ -120,8 +128,8 @@ fun ChannelTestSheet(
 ) {
     val context = LocalContext.current
     BrutSheet(onDismiss) {
-        Text(stringResource(R.string.channel_test_title), style = BrutType.Title)
-        Text(stringResource(R.string.channel_test_intro), style = BrutType.Body, color = BrutColors.CreamDim)
+        PlateTitle(stringResource(R.string.channel_test_title))
+        Text(stringResource(R.string.channel_test_intro), style = BrutType.Body, color = BrutColors.InkDim)
         Spacer(Modifier.height(12.dp))
         Readout(stringResource(R.string.channel_test_input, deviceName, formatRate(test?.sampleRate ?: sampleRate)))
         Spacer(Modifier.height(12.dp))
@@ -133,18 +141,18 @@ fun ChannelTestSheet(
                 val current = test.current
                 Text(
                     stringResource(R.string.channel_test_progress, test.trial + 1, test.total, current?.let { recipeLabel(it) } ?: ""),
-                    style = BrutType.Body, color = BrutColors.Amber,
+                    style = BrutType.Body, color = BrutColors.Accent,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 Spacer(Modifier.height(10.dp))
-                ActionButton(stringResource(R.string.channel_test_stop), BrutColors.Red, Modifier.fillMaxWidth(), onClick = onStop)
+                ActionButton(stringResource(R.string.channel_test_stop), BrutColors.Clip, Modifier.fillMaxWidth(), onClick = onStop)
             }
             done -> Verdict(test, activeRecipe, onUse)
             else -> {
                 val seconds = (CaptureRecipe.CANDIDATES.size * 2.4).toInt() / 5 * 5 + 5
-                Text(stringResource(R.string.channel_test_steps, seconds), style = BrutType.Body, color = BrutColors.Cream)
+                Text(stringResource(R.string.channel_test_steps, seconds), style = BrutType.Body, color = BrutColors.Ink)
                 Spacer(Modifier.height(12.dp))
-                ActionButton(stringResource(R.string.channel_test_start), BrutColors.Amber, Modifier.fillMaxWidth(), onClick = onStart)
+                ActionButton(stringResource(R.string.channel_test_start), BrutColors.Accent, Modifier.fillMaxWidth(), onClick = onStart)
             }
         }
 
@@ -159,9 +167,9 @@ fun ChannelTestSheet(
         if (done) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(stringResource(R.string.channel_test_again), BrutColors.Cream, Modifier.weight(1f), onClick = onStart)
+                ActionButton(stringResource(R.string.channel_test_again), BrutColors.Ink, Modifier.weight(1f), onClick = onStart)
                 val clipLabel = stringResource(R.string.channel_test_title)
-                ActionButton(stringResource(R.string.channel_test_copy), BrutColors.Cream, Modifier.weight(1f)) {
+                ActionButton(stringResource(R.string.channel_test_copy), BrutColors.Ink, Modifier.weight(1f)) {
                     context.getSystemService(ClipboardManager::class.java)
                         ?.setPrimaryClip(ClipData.newPlainText(clipLabel, report(context, test)))
                 }
@@ -175,17 +183,17 @@ private fun Verdict(test: ChannelTestState, activeRecipe: CaptureRecipe?, onUse:
     val best = test.best
     val anyMixed = test.results.any { it.outcome == ProbeOutcome.MIXED }
     val (text, color) = when {
-        best != null -> stringResource(R.string.channel_test_found, recipeLabel(best)) to BrutColors.Green
-        anyMixed -> stringResource(R.string.channel_test_all_mixed) to BrutColors.Red
-        else -> stringResource(R.string.channel_test_inconclusive) to BrutColors.Amber
+        best != null -> stringResource(R.string.channel_test_found, recipeLabel(best)) to BrutColors.Level
+        anyMixed -> stringResource(R.string.channel_test_all_mixed) to BrutColors.Clip
+        else -> stringResource(R.string.channel_test_inconclusive) to BrutColors.Accent
     }
     Text(text, style = BrutType.Body, color = color, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     if (best != null) {
         Spacer(Modifier.height(10.dp))
         if (best == activeRecipe) {
-            Text(stringResource(R.string.channel_test_in_use), style = engraved(BrutType.Legend), color = BrutColors.Green)
+            Text(stringResource(R.string.channel_test_in_use), style = engraved(BrutType.Legend), color = BrutColors.Level)
         } else {
-            ActionButton(stringResource(R.string.channel_test_use), BrutColors.Amber, Modifier.fillMaxWidth()) { onUse(best) }
+            ActionButton(stringResource(R.string.channel_test_use), BrutColors.Accent, Modifier.fillMaxWidth()) { onUse(best) }
         }
     }
 }
@@ -195,8 +203,8 @@ private fun ResultRow(result: ProbeResult) {
     val context = LocalContext.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-            Text(recipeLabel(result.recipe), style = engraved(BrutType.Legend), color = BrutColors.Cream)
-            result.reading?.let { Text(levelsText(context, it), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim) }
+            Text(recipeLabel(result.recipe), style = engraved(BrutType.Legend), color = BrutColors.Ink)
+            result.reading?.let { Text(levelsText(context, it), style = BrutType.ReadoutSmall, color = BrutColors.InkDim) }
         }
         Spacer(Modifier.width(8.dp))
         Text(outcomeText(context, result.outcome).uppercase(), style = engraved(BrutType.Legend), color = outcomeColor(result.outcome))

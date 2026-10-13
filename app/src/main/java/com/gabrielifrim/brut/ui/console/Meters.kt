@@ -1,11 +1,14 @@
 package com.gabrielifrim.brut.ui.console
 
+import com.gabrielifrim.brut.ui.component.recess
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,12 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -44,6 +49,8 @@ import com.gabrielifrim.brut.audio.LoudnessReading
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.ui.formatDb
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutPalette
+import com.gabrielifrim.brut.ui.theme.legibleOn
 import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 
@@ -65,10 +72,10 @@ fun meterPosition(db: Float): Float = when {
 private val SCALE_MARKS = listOf(0, -3, -6, -9, -12, -18, -24, -30, -40, -50, -60)
 private const val SEGMENTS = 48
 
-private fun segmentColor(db: Float): Color = when {
-    db >= -0.5f -> BrutColors.Red
-    db >= -9f -> BrutColors.Amber
-    else -> BrutColors.Green
+private fun BrutPalette.segmentColor(db: Float): Color = when {
+    db >= -0.5f -> clip
+    db >= -9f -> lamp
+    else -> level
 }
 
 /** Seuil de la n-ième LED, retrouvé en inversant l'échelle par dichotomie. */
@@ -103,7 +110,7 @@ fun MeterBridge(
     Column(
         modifier
             .recess()
-            .clip(RoundedCornerShape(BrutShapes.Plate))
+            .clip(BrutShapes.PlateShape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         // Au-delà de 2 voies : un voyant numéroté par voie, et pas de vu-mètres à aiguille
@@ -117,10 +124,15 @@ fun MeterBridge(
             Spacer(Modifier.height(8.dp))
             ClipStrip(levels, channelLabels, onResetClip)
         } else {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Une ligne d'ordinaire ; à grande police, le commutateur passe dessous au lieu d'être écrasé.
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 levels.forEachIndexed { c, level ->
                     ClipLamp(level, channelLabels[c], spokenChannel(c, levels.size), onResetClip)
-                    Spacer(Modifier.width(8.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 ModeSwitch(mode, onModeChange)
@@ -213,8 +225,9 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit, allowVu: 
     val nextLabel = stringResource(R.string.a11y_switch_to, labels.first { it.first == next }.second)
     Row(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(BrutColors.Panel)
+            .heightIn(min = 32.dp)
+            .clip(BrutShapes.InsetShape)
+            .background(BrutColors.Plate)
             .clickable(role = Role.Button, onClickLabel = nextLabel) { onChange(next) }
             .clearAndSetSemantics {
                 contentDescription = name
@@ -225,14 +238,15 @@ private fun ModeSwitch(mode: MeterMode, onChange: (MeterMode) -> Unit, allowVu: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         labels.forEachIndexed { i, (m, text) ->
-            if (i > 0) Text(" \u00B7 ", style = BrutType.Legend, color = BrutColors.CreamFaint)
-            Text(text, style = BrutType.Legend, color = if (m == shown) BrutColors.Amber else BrutColors.CreamDim)
+            if (i > 0) Text(" \u00B7 ", style = BrutType.Legend, color = BrutColors.InkFaint, maxLines = 1, softWrap = false)
+            Text(text, style = BrutType.Legend, color = if (m == shown) BrutColors.Accent else BrutColors.InkDim, maxLines = 1, softWrap = false)
         }
     }
 }
 
 /** Verre d'un voyant éteint : neutre, pour qu'un CLIP au repos ne se lise pas comme une alarme. */
-private val UnlitLens = Color.White.copy(alpha = 0.045f)
+private val unlitLens: Color
+    @Composable get() = BrutColors.palette.let { if (it.isDark) it.highlight.copy(alpha = 0.045f) else it.shadow.copy(alpha = 0.06f) }
 
 /**
  * Voyant de saturation. Rouge : le fichier est écrêté. Ambre : c'est l'entrée
@@ -251,14 +265,15 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
         },
     )
     val (lit, color, text) = when {
-        level.clipped -> Triple(true, BrutColors.Red, stringResource(R.string.clip))
-        level.inputClipped -> Triple(true, BrutColors.Amber, stringResource(R.string.clip_input))
-        else -> Triple(false, BrutColors.Red, stringResource(R.string.clip))
+        level.clipped -> Triple(true, BrutColors.Clip, stringResource(R.string.clip))
+        level.inputClipped -> Triple(true, BrutColors.Lamp, stringResource(R.string.clip_input))
+        else -> Triple(false, BrutColors.Clip, stringResource(R.string.clip))
     }
     Row(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (lit) color else UnlitLens)
+            .heightIn(min = 32.dp)
+            .clip(BrutShapes.InsetShape)
+            .background(if (lit) color else unlitLens)
             .clickable(onClick = onReset)
             // L'état est une région « vivante » : TalkBack annonce la saturation dès qu'elle survient.
             .clearAndSetSemantics {
@@ -273,7 +288,10 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
         Text(
             "$text $label",
             style = BrutType.Legend,
-            color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.4f),
+            // Éteint, le voyant est neutre : un CLIP au repos ne doit pas se lire comme une alarme.
+            color = if (lit) legibleOn(color) else BrutColors.InkFaint,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -283,7 +301,7 @@ private fun ClipLamp(level: ChannelLevel, label: String, spoken: String, onReset
 private fun ClipStrip(levels: List<ChannelLevel>, labels: List<String>, onReset: () -> Unit) {
     val resetLabel = stringResource(R.string.clip_reset)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.clip), style = BrutType.Legend, color = BrutColors.CreamDim, modifier = Modifier.width(SCALE_WIDTH - 4.dp))
+        Text(stringResource(R.string.clip), style = BrutType.Legend, color = BrutColors.InkDim, modifier = Modifier.width(SCALE_WIDTH - 4.dp))
         levels.forEachIndexed { c, level ->
             val name = stringResource(R.string.a11y_clip, spokenChannel(c, levels.size))
             val state = stringResource(
@@ -293,14 +311,14 @@ private fun ClipStrip(levels: List<ChannelLevel>, labels: List<String>, onReset:
                     else -> R.string.a11y_clip_off
                 },
             )
-            val color = if (level.inputClipped && !level.clipped) BrutColors.Amber else BrutColors.Red
+            val color = if (level.inputClipped && !level.clipped) BrutColors.Lamp else BrutColors.Clip
             val lit = level.clipped || level.inputClipped
             Box(
                 Modifier
                     .weight(1f)
-                    .height(22.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(if (lit) color else UnlitLens)
+                    .heightIn(min = 24.dp)
+                    .clip(BrutShapes.InsetShape)
+                    .background(if (lit) color else unlitLens)
                     .clickable(onClick = onReset)
                     .clearAndSetSemantics {
                         contentDescription = name
@@ -310,7 +328,7 @@ private fun ClipStrip(levels: List<ChannelLevel>, labels: List<String>, onReset:
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(labels[c], style = BrutType.Legend, color = if (lit) BrutColors.Graphite else color.copy(alpha = 0.55f))
+                Text(labels[c], style = BrutType.Legend, color = if (lit) legibleOn(color) else BrutColors.InkFaint, maxLines = 1)
             }
         }
     }
@@ -322,11 +340,11 @@ private fun CompactReadout(label: String, spoken: String, level: ChannelLevel, m
     val floor = stringResource(R.string.dbfs_floor)
     val summary = stringResource(R.string.a11y_levels, spoken, spokenDb(level.holdDb), spokenDb(level.rmsDb), spokenDb(level.maxDb))
     Column(modifier.clearAndSetSemantics { contentDescription = summary }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = BrutType.Legend, color = BrutColors.Amber)
+        Text(label, style = BrutType.Legend, color = BrutColors.Accent)
         Text(
             formatDb(level.holdDb)?.substringBefore(',')?.substringBefore('.') ?: floor,
             style = BrutType.ReadoutSmall,
-            color = if (level.maxDb > -1f) BrutColors.Red else BrutColors.Cream,
+            color = if (level.maxDb > -1f) BrutColors.Clip else BrutColors.Ink,
             maxLines = 1,
         )
     }
@@ -338,57 +356,71 @@ private val SCALE_WIDTH = 34.dp
 private fun LedBar(level: ChannelLevel, spoken: String, modifier: Modifier) {
     val name = stringResource(R.string.a11y_peak_meter, spoken)
     val state = spokenDb(level.peakDb)
+    val p = BrutColors.palette
+    // Lu au dessin seulement : le cache ci-dessous survit d'une image à l'autre.
+    val current = rememberUpdatedState(level)
     Canvas(
         modifier
             .padding(horizontal = 6.dp)
             .clearAndSetSemantics {
                 contentDescription = name
                 stateDescription = state
+            }
+            .drawWithCache {
+                // Ce qui ne dépend que de la taille et de la palette est préparé une fois :
+                // le dessin de chaque image ne crée plus aucun objet.
+                val gap = 2.dp.toPx()
+                val segH = (size.height - gap * (SEGMENTS - 1)) / SEGMENTS
+                val segSize = Size(size.width, segH)
+                val radius = CornerRadius(1.5.dp.toPx())
+                val halo = Brush.horizontalGradient(listOf(p.highlight.copy(alpha = if (p.isDark) 0.18f else 0.35f), Color.Transparent), 0f, size.width)
+                val colors = Array(SEGMENTS) { p.segmentColor(SEGMENT_DB[it]) }
+                val unlitAlpha = if (p.isDark) 0.07f else 0.09f
+                val rmsOffset = 3.dp.toPx()
+                val rmsSize = Size(size.width + 2 * rmsOffset, 2.dp.toPx())
+                onDrawBehind {
+                    val level = current.value
+                    val holdIndex = SEGMENT_DB.indexOfFirst { it > level.holdDb } - 1
+                    for (i in 0 until SEGMENTS) {
+                        val top = size.height - (i + 1) * segH - i * gap
+                        val lit = level.peakDb >= SEGMENT_DB[i] - 0.01f
+                        val base = colors[i]
+                        drawRoundRect(if (lit || i == holdIndex) base else base.copy(alpha = unlitAlpha), Offset(0f, top), segSize, radius)
+                        // Halo discret : une LED allumée éclaire un peu autour d'elle.
+                        if (lit) drawRoundRect(halo, Offset(0f, top), segSize, radius)
+                    }
+                    if (level.rmsDb > -70f) {
+                        val rmsY = size.height * (1f - meterPosition(level.rmsDb))
+                        drawRect(p.ink, Offset(-rmsOffset, rmsY - rmsSize.height / 2), rmsSize)
+                    }
+                }
             },
-    ) {
-        val gap = 2.dp.toPx()
-        val segH = (size.height - gap * (SEGMENTS - 1)) / SEGMENTS
-        val radius = CornerRadius(1.5.dp.toPx())
-        val holdIndex = SEGMENT_DB.indexOfFirst { it > level.holdDb } - 1
-        for (i in 0 until SEGMENTS) {
-            val db = SEGMENT_DB[i]
-            val top = size.height - (i + 1) * segH - i * gap
-            val lit = level.peakDb >= db - 0.01f
-            val base = segmentColor(db)
-            val color = when {
-                lit || i == holdIndex -> base
-                else -> base.copy(alpha = 0.07f)
-            }
-            drawRoundRect(color, Offset(0f, top), Size(size.width, segH), radius)
-            if (lit) {
-                // Halo discret : une LED allumée éclaire un peu autour d'elle.
-                drawRoundRect(
-                    Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Transparent)),
-                    Offset(0f, top), Size(size.width, segH), radius,
-                )
-            }
-        }
-        val rmsY = size.height * (1f - meterPosition(level.rmsDb))
-        if (level.rmsDb > -70f) {
-            drawRect(BrutColors.Cream, Offset(-3.dp.toPx(), rmsY - 1.dp.toPx()), Size(size.width + 6.dp.toPx(), 2.dp.toPx()))
-        }
-    }
+    ) {}
 }
 
 @Composable
 private fun Scale(modifier: Modifier) {
     val measurer = rememberTextMeasurer()
-    val style = BrutType.ReadoutSmall.copy(color = BrutColors.CreamDim, textAlign = TextAlign.Center)
-    Canvas(modifier.clearAndSetSemantics {}) {
-        SCALE_MARKS.forEach { mark ->
-            val y = size.height * (1f - meterPosition(mark.toFloat()))
-            val text = if (mark == 0) "0" else "−${-mark}"
-            val layout = measurer.measure(text, style)
-            drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2, y - layout.size.height / 2))
-            drawLine(BrutColors.CreamFaint, Offset(0f, y), Offset(4.dp.toPx(), y))
-            drawLine(BrutColors.CreamFaint, Offset(size.width - 4.dp.toPx(), y), Offset(size.width, y))
-        }
-    }
+    val style = BrutType.ReadoutSmall.copy(color = BrutColors.InkDim, textAlign = TextAlign.Center)
+    val tick = BrutColors.InkFaint
+    Canvas(
+        modifier
+            .clearAndSetSemantics {}
+            // Graduations mesurées une fois par taille, pas à chaque image.
+            .drawWithCache {
+                val marks = SCALE_MARKS.map { mark ->
+                    measurer.measure(if (mark == 0) "0" else "−${-mark}", style) to size.height * (1f - meterPosition(mark.toFloat()))
+                }
+                val tickLen = 4.dp.toPx()
+                onDrawBehind {
+                    marks.forEach { (layout, y) ->
+                        drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2, y - layout.size.height / 2))
+                        drawLine(tick, Offset(0f, y), Offset(tickLen, y))
+                        drawLine(tick, Offset(size.width - tickLen, y), Offset(size.width, y))
+                    }
+                }
+            },
+    ) {}
 }
 
 @Composable
@@ -399,7 +431,7 @@ private fun Readouts(label: String, spoken: String, level: ChannelLevel) {
         Modifier.clearAndSetSemantics { contentDescription = summary },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(label, style = BrutType.Legend, color = BrutColors.Amber)
+        Text(label, style = BrutType.Legend, color = BrutColors.Accent)
         ReadoutLine(stringResource(R.string.meter_peak), formatDb(level.holdDb, signed = true) ?: floor)
         ReadoutLine(stringResource(R.string.meter_rms), formatDb(level.rmsDb) ?: floor)
         ReadoutLine(
@@ -412,13 +444,16 @@ private fun Readouts(label: String, spoken: String, level: ChannelLevel) {
 @Composable
 private fun ReadoutLine(name: String, value: String, highlight: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(name, style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, modifier = Modifier.width(44.dp))
+        // Largeurs minimales, pas fixes : à grande police, la ligne s'élargit au lieu de couper les mots.
+        Text(name, style = BrutType.ReadoutSmall, color = BrutColors.InkDim, maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 44.dp))
         Text(
             value,
             style = BrutType.Readout,
-            color = if (highlight) BrutColors.Red else BrutColors.Cream,
+            color = if (highlight) BrutColors.Clip else BrutColors.Ink,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(52.dp),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 52.dp),
         )
     }
 }
@@ -460,7 +495,7 @@ fun Lamp(color: Color, modifier: Modifier = Modifier, lit: Boolean = true) {
         modifier
             .width(8.dp)
             .height(8.dp)
-            .clip(RoundedCornerShape(50))
+            .clip(BrutShapes.Lens)
             .background(if (lit) color else color.copy(alpha = 0.2f)),
     )
 }

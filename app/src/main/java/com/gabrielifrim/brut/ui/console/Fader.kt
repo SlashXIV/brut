@@ -1,5 +1,8 @@
 package com.gabrielifrim.brut.ui.console
 
+import com.gabrielifrim.brut.ui.component.engraved
+import com.gabrielifrim.brut.ui.component.RackPlate
+import com.gabrielifrim.brut.ui.component.Readout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -23,7 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,9 +41,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -55,7 +56,10 @@ import androidx.compose.ui.unit.dp
 import com.gabrielifrim.brut.R
 import com.gabrielifrim.brut.audio.GainStage
 import com.gabrielifrim.brut.ui.formatDb
+import com.gabrielifrim.brut.ui.component.Metal
+import com.gabrielifrim.brut.ui.motion.rememberHaptics
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -88,7 +92,8 @@ fun GainFader(
     accessibilityLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
+    val p = BrutColors.palette
     val current by rememberUpdatedState(valueDb)
     val onChange by rememberUpdatedState(onValueChange)
     val raw = remember { mutableFloatStateOf(0f) }
@@ -102,20 +107,20 @@ fun GainFader(
         if (snapped == current) return
         val crossedZero = snapped == 0f || (current < 0f) != (snapped < 0f)
         if (crossedZero || snapped == GainStage.MIN_DB || snapped == GainStage.MAX_DB) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            haptics.notch()
         }
         onChange(snapped)
     }
 
     Column(modifier.fillMaxWidth()) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(channelLabel, style = engraved(BrutType.Title), color = BrutColors.Amber)
+        Text(channelLabel, style = engraved(BrutType.Title), color = BrutColors.Accent)
         Spacer(Modifier.weight(1f))
         StepButton("−", stringResource(R.string.gain_decrease)) { emit(current - STEP_DB, detent = false) }
         Readout(
             stringResource(R.string.db_value, formatDb(valueDb, signed = true) ?: "0,0"),
             Modifier.padding(horizontal = 8.dp).width(100.dp),
-            color = if (valueDb == 0f) BrutColors.Cream else BrutColors.Amber,
+            color = if (valueDb == 0f) BrutColors.Ink else BrutColors.Accent,
         )
         StepButton("+", stringResource(R.string.gain_increase)) { emit(current + STEP_DB, detent = false) }
       }
@@ -152,7 +157,7 @@ fun GainFader(
                 val major = db % 12f == 0f
                 val isZero = db == 0f
                 drawLine(
-                    if (isZero) BrutColors.Cream else if (major) BrutColors.CreamDim else BrutColors.CreamFaint,
+                    if (isZero) p.ink else if (major) p.inkDim else p.inkFaint,
                     Offset(x, midY - (if (major) 14.dp else 12.dp).toPx()),
                     Offset(x, midY - 8.dp.toPx()),
                     strokeWidth = if (isZero) 2.dp.toPx() else 1.dp.toPx(),
@@ -163,16 +168,16 @@ fun GainFader(
                         db < 0 -> "−${(-db).toInt()}"
                         else -> "0"
                     }
-                    val layout = measurer.measure(text, BrutType.ReadoutSmall.copy(color = if (isZero) BrutColors.Cream else BrutColors.CreamDim))
+                    val layout = measurer.measure(text, BrutType.ReadoutSmall.copy(color = if (isZero) p.ink else p.inkDim))
                     drawText(layout, topLeft = Offset(x - layout.size.width / 2f, 0f))
                 }
                 db += 3f
             }
 
-            // Fente du fader, creusée dans la tôle.
+            // Fente du fader, creusée dans la tôle : une ombre, quelle que soit la teinte de la tôle.
             val slotH = 4.dp.toPx()
             drawRoundRect(
-                Color(0xFF0B0A08), Offset(capW / 2, midY - slotH / 2), Size(usable, slotH),
+                p.shadow.copy(alpha = if (p.isDark) 0.8f else 0.35f), Offset(capW / 2, midY - slotH / 2), Size(usable, slotH),
                 CornerRadius(slotH / 2),
             )
             // Portion active, depuis 0 dB : amplification ou atténuation se lisent d'un coup d'œil.
@@ -180,7 +185,7 @@ fun GainFader(
             val xv = xOf(current)
             if (current != 0f) {
                 drawRect(
-                    BrutColors.Amber.copy(alpha = 0.8f),
+                    p.accent.copy(alpha = 0.8f),
                     Offset(minOf(x0, xv), midY - 1.dp.toPx()), Size(abs(xv - x0), 2.dp.toPx()),
                 )
             }
@@ -188,9 +193,9 @@ fun GainFader(
             // Bouton du fader : capuchon strié, ligne d'index au centre.
             val capH = 26.dp.toPx()
             val capTop = midY - capH / 2
-            drawRoundRect(Color.Black.copy(alpha = 0.55f), Offset(xv - capW / 2 + 1.5.dp.toPx(), capTop + 2.dp.toPx()), Size(capW, capH), CornerRadius(3.dp.toPx()))
+            drawRoundRect(p.shadow.copy(alpha = if (p.isDark) 0.55f else 0.3f), Offset(xv - capW / 2 + 1.5.dp.toPx(), capTop + 2.dp.toPx()), Size(capW, capH), CornerRadius(3.dp.toPx()))
             drawRoundRect(
-                Brush.horizontalGradient(listOf(Color(0xFF55493C), Color(0xFF2A241E)), xv - capW / 2, xv + capW / 2),
+                Brush.horizontalGradient(listOf(Metal.KnobTop, Metal.CapDark), xv - capW / 2, xv + capW / 2),
                 Offset(xv - capW / 2, capTop), Size(capW, capH), CornerRadius(3.dp.toPx()),
             )
             for (k in 1..4) {
@@ -198,7 +203,8 @@ fun GainFader(
                 drawLine(Color.Black.copy(alpha = 0.35f), Offset(xv - capW / 2 + 2.dp.toPx(), y), Offset(xv + capW / 2 - 2.dp.toPx(), y), 1f)
             }
             drawLine(
-                if (current == 0f) BrutColors.Cream else BrutColors.Amber,
+                // Le capuchon reste sombre dans toutes les palettes : index clair, ambre hors de 0 dB.
+                if (current == 0f) Metal.Index else p.lamp,
                 Offset(xv, capTop + 3.dp.toPx()), Offset(xv, capTop + capH - 3.dp.toPx()),
                 strokeWidth = 2.dp.toPx(),
             )
@@ -221,17 +227,17 @@ private fun MultiGain(channels: Int, labels: List<String>, gains: List<Float>, l
             Column(
                 Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (active) BrutColors.PanelRaised else BrutColors.Recess)
+                    .clip(BrutShapes.InsetShape)
+                    .background(if (active) BrutColors.PlateRaised else BrutColors.Recess)
                     .selectable(selected = c == current, enabled = !linked, role = Role.RadioButton) { selected = c }
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(labels[c], style = engraved(BrutType.Legend), color = if (active) BrutColors.Amber else BrutColors.CreamDim)
+                Text(labels[c], style = engraved(BrutType.Legend), color = if (active) BrutColors.Accent else BrutColors.InkDim)
                 Text(
                     formatDb(gains[c], signed = true) ?: "0,0",
                     style = BrutType.ReadoutSmall,
-                    color = if (gains[c] == 0f) BrutColors.CreamDim else BrutColors.Cream,
+                    color = if (gains[c] == 0f) BrutColors.InkDim else BrutColors.Ink,
                     maxLines = 1,
                 )
             }
@@ -248,13 +254,15 @@ private fun MultiGain(channels: Int, labels: List<String>, gains: List<Float>, l
 /** Petit bouton poussoir gravé, pour les pas fins. */
 @Composable
 private fun StepButton(symbol: String, description: String, onClick: () -> Unit) {
+    val p = BrutColors.palette
     Box(
         Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .size(40.dp)
+            .clip(BrutShapes.InsetShape)
             .drawBehind {
-                drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF3B342C), Color(0xFF221E19))), cornerRadius = CornerRadius(4.dp.toPx()))
-                drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f))
+                drawRect(Brush.verticalGradient(listOf(p.plateRaised, p.plate)))
+                drawRoundRect(p.edge, cornerRadius = CornerRadius(BrutShapes.Inset.toPx()), style = Stroke(1.dp.toPx()))
+                drawLine(p.highlight.copy(alpha = if (p.isDark) 0.08f else 0.9f), Offset(0f, 1f), Offset(size.width, 1f))
             }
             .clickable(role = Role.Button, onClickLabel = description, onClick = onClick)
             // Le symbole « − » ou « + » ne se lit pas : seule l'action compte.
@@ -265,7 +273,7 @@ private fun StepButton(symbol: String, description: String, onClick: () -> Unit)
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(symbol, style = BrutType.BodyStrong, color = BrutColors.Cream)
+        Text(symbol, style = BrutType.BodyStrong, color = BrutColors.Ink)
     }
 }
 
@@ -284,19 +292,19 @@ fun GainPanel(
     RackPlate(modifier.fillMaxWidth(), contentPadding = 8.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.gain).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+                Text(stringResource(R.string.gain).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
                 Spacer(Modifier.weight(1f))
                 if (channels >= 2) {
                     Row(
                         Modifier
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(BrutShapes.InsetShape)
                             .toggleable(value = linked, role = Role.Switch, onValueChange = onLinked)
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Lamp(BrutColors.Amber, lit = linked)
+                        Lamp(BrutColors.Lamp, lit = linked)
                         Spacer(Modifier.width(8.dp))
-                        Text(stringResource(if (stereo) R.string.gain_link else R.string.gain_link_all).uppercase(), style = engraved(BrutType.Legend), color = if (linked) BrutColors.Cream else BrutColors.CreamDim)
+                        Text(stringResource(if (stereo) R.string.gain_link else R.string.gain_link_all).uppercase(), style = engraved(BrutType.Legend), color = if (linked) BrutColors.Ink else BrutColors.InkDim)
                     }
                 }
             }

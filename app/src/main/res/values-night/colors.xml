@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Palette Scène : voir values/colors.xml. -->
+    <color name="brut_facade">#FF16130F</color>
+    <color name="brut_plate">#FF221E19</color>
+    <color name="brut_recess">#FF0D0C0A</color>
+    <color name="brut_edge">#FF3A332B</color>
+    <color name="brut_ink">#FFEFE6D6</color>
+    <color name="brut_ink_dim">#FFA89E90</color>
+    <color name="brut_ink_faint">#FF7E766A</color>
+    <color name="brut_accent">#FFFFB238</color>
+    <color name="brut_lamp">#FFFFB238</color>
+    <color name="brut_clip">#FFFF5A4A</color>
+</resources>

@@ -15,7 +15,9 @@ import com.gabrielifrim.brut.audio.CaptureSource
 import com.gabrielifrim.brut.audio.MeterMode
 import com.gabrielifrim.brut.audio.TakeOptions
 import com.gabrielifrim.brut.audio.TimecodeRate
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /** Réglages retrouvés d'une session à l'autre. */
 data class SavedSettings(
@@ -31,6 +33,17 @@ data class SavedSettings(
     val options: TakeOptions = TakeOptions(),
     /** Combinaisons retenues par le test des voies, par entrée (même clé que [deviceKey]). */
     val recipes: Map<String, CaptureRecipe> = emptyMap(),
+)
+
+/**
+ * Apparence de l'appli, à part des réglages de prise : elle ne passe pas par le contrôleur
+ * audio et s'applique dès qu'elle change.
+ */
+data class Appearance(
+    /** Identifiant de palette, ou « auto » pour suivre le thème du téléphone. */
+    val palette: String = "auto",
+    /** Mouvement sobre : aucun mouvement décoratif. */
+    val sober: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "reglages")
@@ -74,6 +87,18 @@ class SettingsStore(private val context: Context) {
                 CaptureRecipe.decode(line.substringAfter('\t', "")).takeIf { key.isNotEmpty() }?.let { key to it }
             }.toMap(),
         )
+    }
+
+    val appearance: Flow<Appearance> = context.dataStore.data.map { p ->
+        Appearance(palette = p[PALETTE] ?: "auto", sober = p[MOTION] == MOTION_SOBER)
+    }
+
+    suspend fun setPalette(id: String) {
+        context.dataStore.edit { it[PALETTE] = id }
+    }
+
+    suspend fun setSober(sober: Boolean) {
+        context.dataStore.edit { it[MOTION] = if (sober) MOTION_SOBER else "expressif" }
     }
 
     suspend fun save(settings: SavedSettings) {
@@ -121,5 +146,8 @@ class SettingsStore(private val context: Context) {
         val TC_RATE = stringPreferencesKey("tc_cadence")
         val LTC_CHANNEL = intPreferencesKey("tc_voie_ltc")
         val RECIPES = stringPreferencesKey("recettes_voies")
+        val PALETTE = stringPreferencesKey("palette")
+        val MOTION = stringPreferencesKey("mouvement")
+        const val MOTION_SOBER = "sobre"
     }
 }

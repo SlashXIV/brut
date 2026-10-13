@@ -1,5 +1,25 @@
 package com.gabrielifrim.brut.ui.library
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.unit.sp
+import com.gabrielifrim.brut.ui.component.PanelKey
+import com.gabrielifrim.brut.ui.component.LampSelector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.foundation.layout.heightIn
+import com.gabrielifrim.brut.ui.component.engraved
+import com.gabrielifrim.brut.ui.component.chassis
+import com.gabrielifrim.brut.ui.component.recess
+import com.gabrielifrim.brut.ui.component.RackPlate
+import com.gabrielifrim.brut.ui.component.ActionButton
+import com.gabrielifrim.brut.ui.component.Readout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -72,17 +92,13 @@ import com.gabrielifrim.brut.library.PlayerState
 import com.gabrielifrim.brut.library.Take
 import com.gabrielifrim.brut.library.TakeSort
 import com.gabrielifrim.brut.library.Waveform
-import com.gabrielifrim.brut.ui.console.ActionButton
 import com.gabrielifrim.brut.ui.console.Lamp
-import com.gabrielifrim.brut.ui.console.chassis
-import com.gabrielifrim.brut.ui.console.recess
-import com.gabrielifrim.brut.ui.console.RackPlate
-import com.gabrielifrim.brut.ui.console.Readout
-import com.gabrielifrim.brut.ui.console.engraved
 import com.gabrielifrim.brut.ui.console.meterPosition
 import com.gabrielifrim.brut.ui.formatBytes
 import com.gabrielifrim.brut.ui.formatDuration
 import com.gabrielifrim.brut.ui.formatRate
+import com.gabrielifrim.brut.ui.component.Metal
+import com.gabrielifrim.brut.ui.component.PlateTitle
 import com.gabrielifrim.brut.ui.theme.BrutColors
 import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
@@ -159,10 +175,10 @@ fun LibraryScreen(
                 Text(
                     stringResource(R.string.library_read_all),
                     style = BrutType.Body,
-                    color = BrutColors.Amber,
+                    color = BrutColors.Accent,
                     modifier = Modifier
                         .padding(top = 8.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(BrutShapes.InsetShape)
                         .clickable(role = Role.Button, onClick = actions::requestReadAll)
                         .padding(vertical = 6.dp),
                 )
@@ -229,23 +245,34 @@ fun LibraryScreen(
     }
 }
 
+/** En-tête : retour vers la console (en amont), le titre, le nombre de prises. */
 @Composable
 private fun TopBar(count: Int, onBack: () -> Unit) {
+    val back = stringResource(R.string.library_back)
+    val title = stringResource(R.string.library_title)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "‹",
-            style = BrutType.Title,
-            color = BrutColors.Cream,
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.library_back), onClick = onBack)
-                .padding(horizontal = 12.dp, vertical = 2.dp),
+        PanelKey(
+            "‹  " + stringResource(R.string.library_back_console).uppercase(),
+            Modifier
+                .clickable(role = Role.Button, onClick = onBack)
+                .clearAndSetSemantics {
+                    contentDescription = back
+                    role = Role.Button
+                    onClick { onBack(); true }
+                },
         )
-        Column {
-            Text(stringResource(R.string.library_title).uppercase(), style = BrutType.Title, color = BrutColors.Cream)
-            Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Amber))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = title; heading() }) {
+            // Le titre se réduit plutôt que d'être coupé (grande police, écran étroit).
+            BasicText(
+                title.uppercase(),
+                style = BrutType.Title.copy(color = BrutColors.Ink),
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = BrutType.Title.fontSize, stepSize = 1.sp),
+            )
+            Box(Modifier.width(34.dp).height(2.dp).background(BrutColors.Lamp))
         }
-        Spacer(Modifier.weight(1f))
         Readout(pluralTakes(count))
     }
 }
@@ -256,57 +283,41 @@ private fun pluralTakes(count: Int): String =
 
 @Composable
 private fun SearchAndSort(state: LibraryState, actions: LibraryActions) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(
             Modifier
-                .weight(1f)
-                .drawBehind {
-                    drawRoundRect(Color(0xFF0B0A08), cornerRadius = CornerRadius(3.dp.toPx()))
-                    drawRect(Color.Black.copy(alpha = 0.7f), size = Size(size.width, 2.dp.toPx()))
-                }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .recess()
+                .padding(horizontal = 12.dp, vertical = 11.dp),
         ) {
             if (state.query.isEmpty()) {
-                Text(stringResource(R.string.library_search), style = BrutType.Readout, color = BrutColors.CreamDim)
+                Text(stringResource(R.string.library_search), style = BrutType.Readout, color = BrutColors.InkDim)
             }
             BasicTextField(
                 value = state.query,
                 onValueChange = actions::setQuery,
                 singleLine = true,
-                textStyle = BrutType.Readout.copy(color = BrutColors.Amber),
-                cursorBrush = SolidColor(BrutColors.Amber),
+                textStyle = BrutType.Readout.copy(color = BrutColors.Accent),
+                cursorBrush = SolidColor(BrutColors.Accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(Modifier.width(10.dp))
         val labels = mapOf(
             TakeSort.DATE to stringResource(R.string.library_sort_date),
             TakeSort.NAME to stringResource(R.string.library_sort_name),
             TakeSort.DURATION to stringResource(R.string.library_sort_duration),
         )
-        // Commutateur à trois positions : un toucher passe à la suivante.
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(4.dp))
-                .background(BrutColors.Panel)
-                .clickable(role = Role.Button) {
-                    val all = TakeSort.entries
-                    actions.setSort(all[(state.sort.ordinal + 1) % all.size])
-                }
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(R.string.library_sort).uppercase() + " ", style = BrutType.Legend, color = BrutColors.CreamDim)
-            Text(labels.getValue(state.sort).uppercase(), style = BrutType.Legend, color = BrutColors.Amber)
-        }
+        // Les trois tris à la vue : on voit ce qui est choisi et ce qu'on peut choisir.
+        LampSelector(TakeSort.entries, state.sort, { labels.getValue(it) }, actions::setSort)
     }
 }
 
 @Composable
 private fun Centered(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, style = BrutType.Body, color = BrutColors.CreamDim)
+        Text(text, style = BrutType.Body, color = BrutColors.InkDim)
     }
 }
 
@@ -317,7 +328,7 @@ private fun TakeRow(take: Take, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .recess()
-            .clip(RoundedCornerShape(BrutShapes.Plate))
+            .clip(BrutShapes.PlateShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -327,7 +338,7 @@ private fun TakeRow(take: Take, onClick: () -> Unit) {
         Text(
             take.info?.let { formatDuration(it.durationSeconds, withHundredths = false) } ?: "--:--:--",
             style = BrutType.Readout,
-            color = BrutColors.Cream,
+            color = BrutColors.Ink,
         )
     }
 }
@@ -338,18 +349,50 @@ private fun TakeHeader(take: Take, modifier: Modifier = Modifier) {
         // La langue suit la configuration : un changement de langue redessine la date.
         val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
         val date = Instant.ofEpochMilli(take.dateMillis).atZone(ZoneId.systemDefault()).format(dateFormat(locale))
-        Text(date.uppercase(locale), style = engraved(BrutType.Legend), color = BrutColors.Amber)
-        Text(take.baseName, style = engraved(BrutType.BodyStrong), color = BrutColors.Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(formatLine(take), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1)
+        Text(date.uppercase(locale), style = engraved(BrutType.Legend), color = BrutColors.Accent)
+        Text(take.baseName, style = engraved(BrutType.BodyStrong), color = BrutColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(3.dp))
+        MiniPath(take)
+    }
+}
+
+/**
+ * Le chemin de la prise, en petit : son format, ses repères, puis le fichier. Les mêmes
+ * flèches que sur la console : la prise rangée est le bout de ce chemin.
+ */
+@Composable
+private fun MiniPath(take: Take) {
+    val i = take.info
+    val size = formatBytes(take.sizeBytes)
+    val format = i?.let {
+        val depth = if (it.isFloat) "32F" else "${it.bitsPerSample}"
+        "${formatRate(it.sampleRate).replace(" kHz", "k")} · $depth · ${com.gabrielifrim.brut.ui.console.channelsLabel(it.channels).lowercase()}"
+    } ?: stringResource(R.string.library_unreadable)
+    val markers = i?.markers?.size?.takeIf { it > 0 }?.let { androidx.compose.ui.res.pluralStringResource(R.plurals.library_markers, it, it) }
+    val spoken = listOfNotNull(format, markers, size).joinToString(", ")
+    val p = BrutColors.palette
+    // Passe à la ligne à grande police plutôt que de couper le chemin.
+    FlowRow(Modifier.clearAndSetSemantics { contentDescription = spoken }, itemVerticalAlignment = Alignment.CenterVertically) {
+        Text(format, style = BrutType.ReadoutSmall, color = p.inkDim, maxLines = 1)
+        MiniWire(p.inkFaint)
+        if (markers != null) {
+            Text(markers, style = BrutType.ReadoutSmall, color = p.accent, maxLines = 1)
+            MiniWire(p.inkFaint)
+        }
+        Box(Modifier.size(7.dp).clip(BrutShapes.Lens).background(p.inkDim))
+        Spacer(Modifier.width(5.dp))
+        Text(size, style = BrutType.ReadoutSmall, color = p.inkDim, maxLines = 1)
     }
 }
 
 @Composable
-private fun formatLine(take: Take): String {
-    val i = take.info ?: return stringResource(R.string.library_unreadable) + " · " + formatBytes(take.sizeBytes)
-    val depth = if (i.isFloat) "32F" else "${i.bitsPerSample}"
-    val ch = com.gabrielifrim.brut.ui.console.channelsLabel(i.channels)
-    return "${formatRate(i.sampleRate)} · $depth BIT · $ch · ${formatBytes(take.sizeBytes)}"
+private fun MiniWire(color: Color) {
+    Canvas(Modifier.padding(horizontal = 5.dp).size(width = 12.dp, height = 8.dp)) {
+        val y = size.height / 2
+        drawLine(color, Offset(0f, y), Offset(size.width - 1.dp.toPx(), y), 1.dp.toPx())
+        drawLine(color, Offset(size.width - 4.dp.toPx(), y - 3.dp.toPx()), Offset(size.width, y), 1.dp.toPx())
+        drawLine(color, Offset(size.width - 4.dp.toPx(), y + 3.dp.toPx()), Offset(size.width, y), 1.dp.toPx())
+    }
 }
 
 /** La prise sélectionnée, « montée » sur une plaque : forme d'onde, lecture, actions. */
@@ -383,43 +426,44 @@ private fun MountedTake(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(3.dp))
+                        .heightIn(min = 32.dp)
+                        .clip(BrutShapes.InsetShape)
                         .clickable { actions.seek(m.frame.toFloat() / info.frames) }
                         .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("▾ " + formatDuration(m.frame.toDouble() / info.sampleRate, withHundredths = false), style = BrutType.ReadoutSmall, color = BrutColors.Amber)
+                    Text("▾ " + formatDuration(m.frame.toDouble() / info.sampleRate, withHundredths = false), style = BrutType.ReadoutSmall, color = BrutColors.Accent)
                     Spacer(Modifier.width(10.dp))
-                    Text(m.label, style = BrutType.Body, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(m.label, style = BrutType.Body, color = BrutColors.InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             PlaybackRow(take, player, enabled = !recording, actions)
             info?.bext?.let { b ->
                 val rate = info.timecodeRate ?: com.gabrielifrim.brut.audio.TimecodeRate.DEFAULT
                 val tc = com.gabrielifrim.brut.audio.Timecode.fromSamples(b.timeReference, rate, info.sampleRate).format(rate)
-                Text(stringResource(R.string.library_tc, tc, rate.label), style = BrutType.ReadoutSmall, color = BrutColors.Amber)
+                Text(stringResource(R.string.library_tc, tc, rate.label), style = BrutType.ReadoutSmall, color = BrutColors.Accent)
             }
             if ((info?.channels ?: 0) > 2) {
-                Text(stringResource(R.string.library_multi_playback, info!!.channels), style = BrutType.Body, color = BrutColors.CreamDim)
+                Text(stringResource(R.string.library_multi_playback, info!!.channels), style = BrutType.Body, color = BrutColors.InkDim)
             }
             if (recording) {
-                Text(stringResource(R.string.library_recording_busy), style = BrutType.Body, color = BrutColors.Amber)
+                Text(stringResource(R.string.library_recording_busy), style = BrutType.Body, color = BrutColors.Accent)
             }
             take.info?.description?.let {
-                Text(it, style = BrutType.Body, color = BrutColors.CreamDim)
+                Text(it, style = BrutType.Body, color = BrutColors.InkDim)
             }
             // L'édition ne crée que de nouveaux fichiers : elle reste possible sur toute prise lisible.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(stringResource(R.string.library_edit), BrutColors.Amber, Modifier.weight(1f), enabled = (info?.frames ?: 0L) > 0L) {
+                ActionButton(stringResource(R.string.library_edit), BrutColors.Accent, Modifier.weight(1f), enabled = (info?.frames ?: 0L) > 0L) {
                     actions.startTrim(take)
                 }
                 // Le calage réécrit l'heure du bext : sans bext (fichier étranger), rien à caler.
-                ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Amber, Modifier.weight(1f), enabled = info?.bext != null && !recording, onClick = onStamp)
+                ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Accent, Modifier.weight(1f), enabled = info?.bext != null && !recording, onClick = onStamp)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(stringResource(R.string.library_rename), BrutColors.Cream, Modifier.weight(1f), onClick = onRename)
-                ActionButton(stringResource(R.string.library_share), BrutColors.Cream, Modifier.weight(1f)) { actions.share(take) }
-                ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onClick = onDelete)
+                ActionButton(stringResource(R.string.library_rename), BrutColors.Ink, Modifier.weight(1f), onClick = onRename)
+                ActionButton(stringResource(R.string.library_share), BrutColors.Ink, Modifier.weight(1f)) { actions.share(take) }
+                ActionButton(stringResource(R.string.library_delete), BrutColors.Clip, Modifier.weight(1f), onClick = onDelete)
             }
         }
     }
@@ -432,13 +476,21 @@ private fun MountedTake(
 @Composable
 private fun WaveformView(waveform: Waveform?, fraction: Float, markers: List<Float>, enabled: Boolean, onSeek: (Float) -> Unit) {
     val description = stringResource(R.string.library_waveform)
+    val p = BrutColors.palette
     Canvas(
         Modifier
             .fillMaxWidth()
             .height(76.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color(0xFF0B0A08))
-            .semantics { contentDescription = description }
+            .clip(BrutShapes.InsetShape)
+            .background(p.display)
+            // Réglable pour TalkBack : balayer vers le haut ou le bas déplace la tête de lecture.
+            .semantics {
+                contentDescription = description
+                if (enabled) {
+                    progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f, steps = 99)
+                    setProgress { onSeek(it); true }
+                }
+            }
             .pointerInput(enabled) {
                 if (enabled) detectTapGestures { onSeek(it.x / size.width) }
             }
@@ -450,30 +502,30 @@ private fun WaveformView(waveform: Waveform?, fraction: Float, markers: List<Flo
             },
     ) {
         val mid = size.height / 2
-        drawLine(BrutColors.CreamFaint.copy(alpha = 0.4f), Offset(0f, mid), Offset(size.width, mid), 1f)
+        drawLine(p.inkFaint.copy(alpha = 0.4f), Offset(0f, mid), Offset(size.width, mid), 1f)
         val peaks = waveform?.peaks
         if (peaks != null) {
             val step = size.width / peaks.size
             val playX = fraction * size.width
-            peaks.forEachIndexed { i, p ->
-                val h = meterPosition(LevelMeter.toDb(p)) * (mid - 2.dp.toPx())
+            peaks.forEachIndexed { i, peak ->
+                val h = meterPosition(LevelMeter.toDb(peak)) * (mid - 2.dp.toPx())
                 val x = i * step
                 val color = when {
-                    p >= LevelMeter.CLIP_LINEAR -> BrutColors.Red
-                    x <= playX -> BrutColors.Amber
-                    else -> BrutColors.CreamDim
+                    peak >= LevelMeter.CLIP_LINEAR -> p.clip
+                    x <= playX -> p.accent
+                    else -> p.inkDim
                 }
                 drawRect(color, Offset(x, mid - h), Size(maxOf(step - 1f, 1f), h * 2))
             }
         }
         markers.forEach { f ->
             val mx = f * size.width
-            drawLine(BrutColors.Amber.copy(alpha = 0.7f), Offset(mx, 0f), Offset(mx, size.height), 1.dp.toPx())
+            drawLine(p.lamp.copy(alpha = 0.7f), Offset(mx, 0f), Offset(mx, size.height), 1.dp.toPx())
             val t = 5.dp.toPx()
-            drawPath(Path().apply { moveTo(mx - t, 0f); lineTo(mx + t, 0f); lineTo(mx, t * 1.4f); close() }, BrutColors.Amber)
+            drawPath(Path().apply { moveTo(mx - t, 0f); lineTo(mx + t, 0f); lineTo(mx, t * 1.4f); close() }, p.lamp)
         }
         val x = fraction * size.width
-        drawLine(BrutColors.Cream, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
+        drawLine(p.ink, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
     }
 }
 
@@ -488,11 +540,14 @@ internal fun PlayButton(playing: Boolean, enabled: Boolean, onClick: () -> Unit)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
+        val edge = BrutColors.Edge
+        val lamp = BrutColors.Lamp
         Canvas(Modifier.size(52.dp)) {
             val r = size.minDimension / 2
-            drawCircle(Brush.verticalGradient(listOf(Color(0xFF3E372F), Color(0xFF171410))), r)
-            drawCircle(BrutColors.Edge, r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
-            val ink = if (enabled) BrutColors.Amber else BrutColors.CreamFaint
+            drawCircle(Brush.verticalGradient(listOf(Metal.CapLight, Metal.KnobBottom)), r)
+            drawCircle(edge, r, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+            // Bouton métal sombre dans toutes les palettes : symbole ambre lumineux.
+            val ink = if (enabled) lamp else Metal.Index.copy(alpha = 0.35f)
             if (playing) {
                 val w = r * 0.22f
                 val h = r * 0.8f
@@ -518,11 +573,11 @@ private fun FolderPlate(label: String, custom: Boolean, enabled: Boolean, action
     RackPlate(Modifier.fillMaxWidth(), contentPadding = 6.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.folder_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+                Text(stringResource(R.string.folder_title).uppercase(), style = engraved(BrutType.Legend), color = BrutColors.InkDim)
                 // Le nom du dossier en grand, son chemin en petit : un long chemin ne masque plus l'essentiel.
-                Text(label.substringAfterLast('/'), style = engraved(BrutType.BodyStrong), color = BrutColors.Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label.substringAfterLast('/'), style = engraved(BrutType.BodyStrong), color = BrutColors.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if ('/' in label) {
-                    Text(label.substringBeforeLast('/'), style = BrutType.ReadoutSmall, color = BrutColors.CreamDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(label.substringBeforeLast('/'), style = BrutType.ReadoutSmall, color = BrutColors.InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (custom) {
@@ -539,9 +594,9 @@ private fun SmallAction(text: String, enabled: Boolean, onClick: () -> Unit) {
     Text(
         text.uppercase(),
         style = engraved(BrutType.Legend),
-        color = if (enabled) BrutColors.Amber else BrutColors.CreamFaint,
+        color = if (enabled) BrutColors.Accent else BrutColors.InkFaint,
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(BrutShapes.InsetShape)
             .background(BrutColors.Recess)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -553,11 +608,11 @@ private fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: 
     Dialog(onDismissRequest = onDismiss) {
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.library_delete_title), style = BrutType.Title, color = BrutColors.Cream)
-                Text(stringResource(R.string.library_delete_body, name), style = BrutType.Body, color = BrutColors.CreamDim)
+                PlateTitle(stringResource(R.string.library_delete_title))
+                Text(stringResource(R.string.library_delete_body, name), style = BrutType.Body, color = BrutColors.InkDim)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onClick = onDismiss)
-                    ActionButton(stringResource(R.string.library_delete), BrutColors.Red, Modifier.weight(1f), onClick = onConfirm)
+                    ActionButton(stringResource(R.string.library_cancel), BrutColors.InkDim, Modifier.weight(1f), onClick = onDismiss)
+                    ActionButton(stringResource(R.string.library_delete), BrutColors.Clip, Modifier.weight(1f), onClick = onConfirm)
                 }
             }
         }
@@ -570,27 +625,27 @@ private fun StampDialog(channels: Int, onChannel: (Int) -> Unit, onDismiss: () -
     Dialog(onDismissRequest = onDismiss) {
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.library_ltc_stamp), style = BrutType.Title, color = BrutColors.Cream)
-                Text(stringResource(R.string.library_ltc_body), style = BrutType.Body, color = BrutColors.CreamDim)
+                PlateTitle(stringResource(R.string.library_ltc_stamp))
+                Text(stringResource(R.string.library_ltc_body), style = BrutType.Body, color = BrutColors.InkDim)
                 if (channels > 2) {
                     // Une touche par voie, par rangées de quatre.
                     (0 until channels).chunked(4).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             row.forEach { c ->
-                                ActionButton(stringResource(R.string.track_name, c + 1), BrutColors.Amber, Modifier.weight(1f)) { onChannel(c) }
+                                ActionButton(stringResource(R.string.track_name, c + 1), BrutColors.Accent, Modifier.weight(1f)) { onChannel(c) }
                             }
                             repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 } else if (channels == 2) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ActionButton(stringResource(R.string.library_ltc_left), BrutColors.Amber, Modifier.weight(1f)) { onChannel(0) }
-                        ActionButton(stringResource(R.string.library_ltc_right), BrutColors.Amber, Modifier.weight(1f)) { onChannel(1) }
+                        ActionButton(stringResource(R.string.library_ltc_left), BrutColors.Accent, Modifier.weight(1f)) { onChannel(0) }
+                        ActionButton(stringResource(R.string.library_ltc_right), BrutColors.Accent, Modifier.weight(1f)) { onChannel(1) }
                     }
                 } else {
-                    ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Amber, Modifier.fillMaxWidth()) { onChannel(0) }
+                    ActionButton(stringResource(R.string.library_ltc_stamp), BrutColors.Accent, Modifier.fillMaxWidth()) { onChannel(0) }
                 }
-                ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.fillMaxWidth(), onClick = onDismiss)
+                ActionButton(stringResource(R.string.library_cancel), BrutColors.InkDim, Modifier.fillMaxWidth(), onClick = onDismiss)
             }
         }
     }
@@ -603,27 +658,28 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
     Dialog(onDismissRequest = onDismiss) {
         RackPlate(Modifier.fillMaxWidth(), contentPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.library_rename_title), style = BrutType.Title, color = BrutColors.Cream)
+                PlateTitle(stringResource(R.string.library_rename_title))
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .drawBehind { drawRoundRect(Color(0xFF0B0A08), cornerRadius = CornerRadius(3.dp.toPx())) }
+                        .heightIn(min = 44.dp)
+                        .recess()
                         .padding(12.dp),
                 ) {
                     BasicTextField(
                         value = value,
                         onValueChange = { value = it },
                         singleLine = true,
-                        textStyle = BrutType.Readout.copy(color = BrutColors.Amber),
-                        cursorBrush = SolidColor(BrutColors.Amber),
+                        textStyle = BrutType.Readout.copy(color = BrutColors.Accent),
+                        cursorBrush = SolidColor(BrutColors.Accent),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                 }
-                Text(stringResource(R.string.library_rename_hint), style = BrutType.Body, color = BrutColors.CreamDim)
+                Text(stringResource(R.string.library_rename_hint), style = BrutType.Body, color = BrutColors.InkDim)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(stringResource(R.string.library_cancel), BrutColors.CreamDim, Modifier.weight(1f), onClick = onDismiss)
-                    ActionButton(stringResource(R.string.library_rename), BrutColors.Amber, Modifier.weight(1f)) {
+                    ActionButton(stringResource(R.string.library_cancel), BrutColors.InkDim, Modifier.weight(1f), onClick = onDismiss)
+                    ActionButton(stringResource(R.string.library_rename), BrutColors.Accent, Modifier.weight(1f)) {
                         if (value.isNotBlank()) onConfirm(value)
                     }
                 }
@@ -645,14 +701,15 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
     }
     AnimatedVisibility(message != null, modifier, enter = fadeIn(), exit = fadeOut()) {
         val m = shown ?: return@AnimatedVisibility
+        val stripe = if (m is LibraryMessage.Failed || m is LibraryMessage.LtcNotFound || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Clip else BrutColors.Lamp
         Row(
             Modifier
                 .padding(16.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(4.dp))
-                .background(BrutColors.PanelRaised)
+                .clip(BrutShapes.InsetShape)
+                .background(BrutColors.PlateRaised)
                 .semantics { liveRegion = LiveRegionMode.Polite }
-                .drawBehind { drawRect(if (m is LibraryMessage.Failed || m is LibraryMessage.LtcNotFound || (m is LibraryMessage.Exported && m.clipped > 0)) BrutColors.Red else BrutColors.Amber, Offset.Zero, size.copy(width = 4.dp.toPx())) }
+                .drawBehind { drawRect(stripe, Offset.Zero, size.copy(width = 4.dp.toPx())) }
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -676,14 +733,14 @@ private fun LibraryMessageBar(message: LibraryMessage?, actions: LibraryActions,
                     }
                 }
             }
-            Text(text, style = BrutType.Body, color = BrutColors.Cream, modifier = Modifier.weight(1f))
+            Text(text, style = BrutType.Body, color = BrutColors.Ink, modifier = Modifier.weight(1f))
             if (m is LibraryMessage.Trashed && m.take.canUndoDelete) {
                 Text(
                     stringResource(R.string.library_undo).uppercase(),
                     style = BrutType.Legend,
-                    color = BrutColors.Amber,
+                    color = BrutColors.Accent,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(BrutShapes.InsetShape)
                         .clickable(role = Role.Button) { actions.undoTrash(m.take) }
                         .padding(8.dp),
                 )

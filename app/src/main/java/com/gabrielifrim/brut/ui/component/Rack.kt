@@ -1,33 +1,35 @@
-package com.gabrielifrim.brut.ui.console
+package com.gabrielifrim.brut.ui.component
 
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -35,18 +37,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
@@ -58,7 +59,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.gabrielifrim.brut.ui.motion.LocalMotionLevel
+import com.gabrielifrim.brut.ui.motion.rememberHaptics
 import com.gabrielifrim.brut.ui.theme.BrutColors
+import com.gabrielifrim.brut.ui.theme.BrutPalette
 import com.gabrielifrim.brut.ui.theme.BrutShapes
 import com.gabrielifrim.brut.ui.theme.BrutType
 import kotlin.math.abs
@@ -67,56 +72,84 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * Texte « gravé » dans la tôle : une ombre sombre au-dessus et un reflet clair dessous
- * suffisent à faire lire un creux. Réservé aux légendes, pas aux textes longs.
+ * Pièces métalliques montées sur la façade (boutons, vis) : les mêmes quelle que soit la
+ * palette. Un bouton noir reste noir sur une tôle claire, comme sur une vraie console.
  */
-fun engraved(style: TextStyle): TextStyle = style.copy(
-    shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, -1.2f), 0.5f),
-)
+object Metal {
+    val KnobTop = Color(0xFF4A4238)
+    val KnobBottom = Color(0xFF1C1814)
+    val CapLight = Color(0xFF3B342C)
+    val CapDark = Color(0xFF26211C)
+    val Index = Color(0xFFEFE6D6)
+    val ScrewLight = Color(0xFF5C534A)
+    val ScrewDark = Color(0xFF2A2520)
+    val ScrewSlot = Color(0xFF14110E)
+}
 
 /**
- * Façade du châssis : le fond de chaque écran. Un dégradé à peine perceptible et un
- * vignettage sur les bords suffisent à en faire une surface, sur laquelle les plaques
- * sont encastrées au lieu de flotter sur un aplat. Pas de texture : la façade reste plus
- * calme que les plaques.
+ * Sérigraphie qui accroche la lumière : sur une tôle sombre, une ombre au-dessus fait lire un
+ * creux ; sur une tôle claire, un reflet dessous fait lire l'encre posée. Réservé aux légendes.
  */
-fun Modifier.chassis(): Modifier = drawBehind {
-    drawRect(Brush.verticalGradient(listOf(Color(0xFF191612), Color(0xFF0F0D0B))))
-    drawRect(
-        Brush.radialGradient(
-            0.55f to Color.Transparent,
-            1f to Color.Black.copy(alpha = 0.35f),
-            center = Offset(size.width / 2f, size.height * 0.4f),
-            radius = maxOf(size.width, size.height) * 0.8f,
-        ),
+@Composable
+@ReadOnlyComposable
+fun engraved(style: TextStyle): TextStyle {
+    val p = BrutColors.palette
+    return style.copy(
+        shadow = if (p.isDark) Shadow(p.shadow.copy(alpha = 0.85f), Offset(0f, -1.2f), 0.5f)
+        else Shadow(p.highlight.copy(alpha = 0.9f), Offset(0f, 1f), 0.5f),
     )
 }
 
 /**
- * Creux dans la façade (pont de mesure, afficheurs en long) : même rayon que les plaques,
- * ombre portée vers l'intérieur par l'arête du haut, lèvre claire sous l'arête du bas.
+ * Façade du châssis : le fond de chaque écran. Un dégradé à peine perceptible et un
+ * vignettage sur les bords suffisent à en faire une surface sur laquelle les plaques sont
+ * encastrées. Pas de texture : la façade reste plus calme que les plaques.
+ */
+fun Modifier.chassis(): Modifier = composed {
+    val p = BrutColors.palette
+    drawWithCache {
+        val face = Brush.verticalGradient(listOf(p.facade, p.facadeDeep))
+        val vignette = Brush.radialGradient(
+            0.55f to Color.Transparent,
+            1f to p.shadow.copy(alpha = if (p.isDark) 0.35f else 0.10f),
+            center = Offset(size.width / 2f, size.height * 0.4f),
+            radius = maxOf(size.width, size.height) * 0.8f,
+        )
+        onDrawBehind {
+            drawRect(face)
+            drawRect(vignette)
+        }
+    }
+}
+
+/**
+ * Creux dans la façade (pont de mesure, afficheurs en long, champs) : même rayon que les
+ * plaques, ombre portée vers l'intérieur par l'arête du haut, lèvre claire sous l'arête du bas.
  * À placer avant un `clip` au même rayon pour que la lèvre reste visible.
  */
-fun Modifier.recess(fill: Color = BrutColors.Recess): Modifier = drawBehind {
-    val radius = BrutShapes.Plate.toPx()
-    val px = 1.dp.toPx()
-    // Lèvre : la façade accroche la lumière juste sous le creux.
-    drawRoundRect(
-        Color.White.copy(alpha = 0.06f), Offset(-px, 0f), Size(size.width + 2 * px, size.height + px),
-        CornerRadius(radius + px),
-    )
-    drawRoundRect(fill, cornerRadius = CornerRadius(radius))
-    clipPath(Path().apply { addRoundRect(RoundRect(size.toRect(), CornerRadius(radius))) }) {
-        drawRect(
-            Brush.verticalGradient(
-                listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent), endY = 8.dp.toPx(),
-            ),
-            size = Size(size.width, 8.dp.toPx()),
+fun Modifier.recess(fill: Color? = null): Modifier = composed {
+    val p = BrutColors.palette
+    val color = fill ?: p.recess
+    drawWithCache {
+        val radius = BrutShapes.Plate.toPx()
+        val px = 1.dp.toPx()
+        val inner = Path().apply { addRoundRect(RoundRect(size.toRect(), CornerRadius(radius))) }
+        val topShadow = Brush.verticalGradient(
+            listOf(p.shadow.copy(alpha = if (p.isDark) 0.55f else 0.16f), Color.Transparent), endY = 8.dp.toPx(),
         )
+        onDrawBehind {
+            // Lèvre : la façade accroche la lumière juste sous le creux.
+            drawRoundRect(
+                p.highlight.copy(alpha = if (p.isDark) 0.06f else 0.8f), Offset(-px, 0f),
+                Size(size.width + 2 * px, size.height + px), CornerRadius(radius + px),
+            )
+            drawRoundRect(color, cornerRadius = CornerRadius(radius))
+            clipPath(inner) { drawRect(topShadow, size = Size(size.width, 8.dp.toPx())) }
+            drawRoundRect(
+                p.shadow.copy(alpha = if (p.isDark) 0.7f else 0.22f), cornerRadius = CornerRadius(radius), style = Stroke(px),
+            )
+        }
     }
-    drawRoundRect(
-        Color.Black.copy(alpha = 0.7f), cornerRadius = CornerRadius(radius), style = Stroke(px),
-    )
 }
 
 /**
@@ -129,79 +162,83 @@ fun RackPlate(
     contentPadding: Dp = 14.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val p = BrutColors.palette
     Box(
         modifier
-            .drawBehind { drawPlate() }
+            .drawWithCache {
+                val plate = Path().apply { addRoundRect(RoundRect(size.toRect(), CornerRadius(BrutShapes.Plate.toPx()))) }
+                onDrawBehind { drawPlate(p, plate) }
+            }
             .padding(horizontal = contentPadding + 14.dp, vertical = contentPadding),
         content = content,
     )
 }
 
-private fun DrawScope.drawPlate() {
+private fun DrawScope.drawPlate(p: BrutPalette, outline: Path) {
     val radius = BrutShapes.Plate.toPx()
     val r = CornerRadius(radius)
     val px = 1.dp.toPx()
+    val shade = if (p.isDark) 1f else 0.45f
     // Ombre douce sur la façade : trois couches de plus en plus larges et pâles, décalées
     // vers le bas (lumière d'au-dessus). Elles débordent du composant sans changer la mise en page.
-    listOf(4f to 0.07f, 2.5f to 0.12f, 1f to 0.22f).forEach { (spreadDp, alpha) ->
+    for ((spreadDp, alpha) in SHADOW_LAYERS) {
         val spread = spreadDp * px
         drawRoundRect(
-            Color.Black.copy(alpha = alpha),
+            p.shadow.copy(alpha = alpha * shade),
             Offset(-spread, -spread + spread * 0.8f),
             Size(size.width + 2 * spread, size.height + 2 * spread),
             CornerRadius(radius + spread),
         )
     }
     // Joint : la fente sombre entre la plaque et la façade.
-    drawRoundRect(Color.Black.copy(alpha = 0.6f), Offset(-px, -px), Size(size.width + 2 * px, size.height + 2 * px), CornerRadius(radius + px))
+    drawRoundRect(p.shadow.copy(alpha = 0.6f * shade), Offset(-px, -px), Size(size.width + 2 * px, size.height + 2 * px), CornerRadius(radius + px))
     // Tôle : dégradé vertical léger + stries de brossage horizontales, tenues dans l'arrondi.
-    drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF2E2822), Color(0xFF221E19))), cornerRadius = r)
-    clipPath(Path().apply { addRoundRect(RoundRect(size.toRect(), r)) }) {
+    drawRoundRect(Brush.verticalGradient(listOf(p.plateRaised, p.plate)), cornerRadius = r)
+    clipPath(outline) {
         val step = 3.dp.toPx()
+        val strong = if (p.isDark) p.highlight.copy(alpha = 0.025f) else p.shadow.copy(alpha = 0.035f)
+        val light = if (p.isDark) p.highlight.copy(alpha = 0.012f) else p.shadow.copy(alpha = 0.018f)
         var y = step
         var i = 0
         while (y < size.height) {
-            drawLine(
-                Color.White.copy(alpha = if (i % 3 == 0) 0.025f else 0.012f),
-                Offset(0f, y), Offset(size.width, y), strokeWidth = 1f,
-            )
+            drawLine(if (i % 3 == 0) strong else light, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
             y += step
             i++
         }
     }
-    // Arêtes : un liseré qui suit l'arrondi, clair en haut, sombre en bas, comme une plaque
-    // éclairée d'au-dessus.
+    // Arêtes : un liseré qui suit l'arrondi, clair en haut, sombre en bas (éclairage d'au-dessus).
     val half = px / 2f
     drawRoundRect(
         Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.10f),
+            0f to p.highlight.copy(alpha = if (p.isDark) 0.10f else 0.9f),
             0.3f to Color.Transparent,
             0.7f to Color.Transparent,
-            1f to Color.Black.copy(alpha = 0.5f),
+            1f to p.shadow.copy(alpha = 0.5f * shade),
         ),
         Offset(half, half), Size(size.width - px, size.height - px), CornerRadius(radius - half),
         style = Stroke(px),
     )
     val inset = 9.dp.toPx()
-    listOf(
-        Offset(inset, inset) to 20f,
-        Offset(size.width - inset, inset) to 75f,
-        Offset(inset, size.height - inset) to 130f,
-        Offset(size.width - inset, size.height - inset) to 45f,
-    ).forEach { (c, angle) -> drawScrew(c, 3.2.dp.toPx(), angle) }
+    drawScrew(Offset(inset, inset), 20f)
+    drawScrew(Offset(size.width - inset, inset), 75f)
+    drawScrew(Offset(inset, size.height - inset), 130f)
+    drawScrew(Offset(size.width - inset, size.height - inset), 45f)
 }
 
+private val SHADOW_LAYERS = listOf(4f to 0.07f, 2.5f to 0.12f, 1f to 0.22f)
+
 /** Vis cruciforme vue de face, la fente orientée au hasard comme sur un vrai rack. */
-private fun DrawScope.drawScrew(c: Offset, radius: Float, angle: Float) {
-    drawCircle(Color.Black.copy(alpha = 0.55f), radius + 1.2f, c + Offset(0f, 0.8f))
+private fun DrawScope.drawScrew(c: Offset, angle: Float) {
+    val radius = 3.2.dp.toPx()
+    drawCircle(Color.Black.copy(alpha = 0.45f), radius + 1.2f, c + Offset(0f, 0.8f))
     drawCircle(
-        Brush.radialGradient(listOf(Color(0xFF5C534A), Color(0xFF2A2520)), c - Offset(radius * 0.4f, radius * 0.4f), radius * 1.6f),
+        Brush.radialGradient(listOf(Metal.ScrewLight, Metal.ScrewDark), c - Offset(radius * 0.4f, radius * 0.4f), radius * 1.6f),
         radius, c,
     )
     rotate(angle, c) {
         val l = radius * 0.62f
-        drawLine(Color(0xFF14110E), c - Offset(l, 0f), c + Offset(l, 0f), radius * 0.32f, StrokeCap.Round)
-        drawLine(Color(0xFF14110E), c - Offset(0f, l), c + Offset(0f, l), radius * 0.32f, StrokeCap.Round)
+        drawLine(Metal.ScrewSlot, c - Offset(l, 0f), c + Offset(l, 0f), radius * 0.32f, StrokeCap.Round)
+        drawLine(Metal.ScrewSlot, c - Offset(0f, l), c + Offset(0f, l), radius * 0.32f, StrokeCap.Round)
     }
 }
 
@@ -224,8 +261,9 @@ fun <T> RotarySelector(
     isNative: (T) -> Boolean = { true },
     knobSize: Dp = 50.dp,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     val density = LocalDensity.current
+    val motion = LocalMotionLevel.current
     val index = options.indexOf(selected).coerceAtLeast(0)
     val currentIndex by rememberUpdatedState(index)
     val select by rememberUpdatedState(onSelect)
@@ -236,19 +274,26 @@ fun <T> RotarySelector(
         else -> 170f
     }
     fun angleOf(i: Int) = if (options.size == 1) 0f else -span / 2 + span * i / (options.size - 1)
-    val pointer by animateFloatAsState(angleOf(index), spring(dampingRatio = 0.55f, stiffness = 700f), label = "cran")
+    val pointer by animateFloatAsState(
+        angleOf(index),
+        if (motion.animates) spring(dampingRatio = 0.55f, stiffness = 700f) else snap(),
+        label = "cran",
+    )
     val drag = remember { mutableFloatStateOf(0f) }
 
     fun choose(i: Int) {
         if (!enabled || i == currentIndex) return
-        haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        haptics.detent()
         select(options[i])
     }
 
+    val accent = BrutColors.Accent
+    val faint = BrutColors.InkFaint
+    val shadow = BrutColors.Shadow
     val labelRadius = knobSize * 0.92f
     val boxSize = knobSize + 56.dp
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(legend, style = engraved(BrutType.Legend), color = BrutColors.CreamDim)
+        Text(legend, style = engraved(BrutType.Legend), color = BrutColors.InkDim)
         Box(Modifier.size(width = boxSize, height = knobSize + 46.dp)) {
             val pivot = Offset(with(density) { boxSize.toPx() } / 2, with(density) { (knobSize / 2 + 34.dp).toPx() })
             // Repères sérigraphiés autour du bouton.
@@ -263,11 +308,12 @@ fun <T> RotarySelector(
                     label(option),
                     style = engraved(BrutType.Legend).copy(textAlign = TextAlign.Center, letterSpacing = BrutType.Legend.letterSpacing * 0.5f),
                     color = when {
-                        !enabled -> BrutColors.CreamFaint
-                        active -> if (isNative(option)) BrutColors.Amber else BrutColors.Amber.copy(alpha = 0.55f)
-                        isNative(option) -> BrutColors.CreamDim
-                        else -> BrutColors.CreamFaint
+                        !enabled -> faint
+                        active -> if (isNative(option)) accent else accent.copy(alpha = 0.6f)
+                        isNative(option) -> BrutColors.InkDim
+                        else -> faint
                     },
+                    maxLines = 1,
                     modifier = Modifier
                         .width(w)
                         .offset { IntOffset((x - w.toPx() / 2).roundToInt(), (y - 9.dp.toPx()).roundToInt()) }
@@ -308,7 +354,7 @@ fun <T> RotarySelector(
                 options.indices.forEach { i ->
                     rotate(angleOf(i), center) {
                         drawLine(
-                            if (i == index) BrutColors.Amber else BrutColors.CreamFaint,
+                            if (i == index) accent else faint,
                             Offset(center.x, center.y - r * 1.02f),
                             Offset(center.x, center.y - r * 1.22f),
                             strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round,
@@ -316,19 +362,19 @@ fun <T> RotarySelector(
                     }
                 }
                 // Bouton à jupe moletée.
-                drawCircle(Color.Black.copy(alpha = 0.5f), r * 0.98f, center + Offset(0f, 2.5.dp.toPx()))
-                drawCircle(Brush.verticalGradient(listOf(Color(0xFF4A4238), Color(0xFF1C1814))), r * 0.94f)
+                drawCircle(shadow.copy(alpha = 0.45f), r * 0.98f, center + Offset(0f, 2.5.dp.toPx()))
+                drawCircle(Brush.verticalGradient(listOf(Metal.KnobTop, Metal.KnobBottom)), r * 0.94f)
                 for (k in 0 until 36) {
                     rotate(k * 10f, center) {
                         drawLine(Color.Black.copy(alpha = 0.35f), Offset(center.x, center.y - r * 0.94f), Offset(center.x, center.y - r * 0.80f), 1.2f)
                     }
                 }
-                drawCircle(Brush.radialGradient(listOf(Color(0xFF3B342C), Color(0xFF26211C)), center, r * 0.7f), r * 0.72f)
+                drawCircle(Brush.radialGradient(listOf(Metal.CapLight, Metal.CapDark), center, r * 0.7f), r * 0.72f)
                 drawCircle(Color.White.copy(alpha = 0.06f), r * 0.72f, style = Stroke(1f))
-                // Index : une flèche crème qui va du centre au bord.
+                // Index : une flèche claire qui va du centre au bord.
                 rotate(pointer, center) {
                     drawLine(
-                        if (enabled) BrutColors.Cream else BrutColors.CreamFaint,
+                        if (enabled) Metal.Index else Metal.Index.copy(alpha = 0.4f),
                         Offset(center.x, center.y - r * 0.68f), Offset(center.x, center.y - r * 0.18f),
                         strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round,
                     )
@@ -341,18 +387,21 @@ fun <T> RotarySelector(
 /** Touche d'action en relief, légende gravée : la même partout où l'on agit sur une plaque. */
 @Composable
 fun ActionButton(text: String, color: Color, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val p = BrutColors.palette
     Box(
         modifier
-            .clip(RoundedCornerShape(4.dp))
+            .heightIn(min = 40.dp)
+            .clip(BrutShapes.InsetShape)
             .drawBehind {
-                drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF3B342C), Color(0xFF221E19))), cornerRadius = CornerRadius(4.dp.toPx()))
-                drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, 0.5f), Offset(size.width, 0.5f))
+                drawRect(Brush.verticalGradient(listOf(p.plateRaised, p.plate)))
+                drawRoundRect(p.edge, cornerRadius = CornerRadius(BrutShapes.Inset.toPx()), style = Stroke(1.dp.toPx()))
+                drawLine(p.highlight.copy(alpha = if (p.isDark) 0.08f else 0.9f), Offset(0f, 1f), Offset(size.width, 1f))
             }
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text.uppercase(), style = engraved(BrutType.Legend), color = if (enabled) color else BrutColors.CreamFaint, maxLines = 1)
+        Text(text.uppercase(), style = engraved(BrutType.Action), color = if (enabled) color else BrutColors.InkFaint, maxLines = 1)
     }
 }
 
@@ -369,25 +418,25 @@ fun StatusTag(text: String, color: Color, modifier: Modifier = Modifier) {
     )
 }
 
-/** Petit afficheur rétroéclairé encastré dans la plaque, pour une valeur courte. */
+/** Petit afficheur encastré dans la plaque, pour une valeur courte. */
 @Composable
-fun Readout(text: String, modifier: Modifier = Modifier, color: Color = BrutColors.Amber) {
+fun Readout(text: String, modifier: Modifier = Modifier, color: Color = BrutColors.Accent) {
+    val p = BrutColors.palette
     Box(
         modifier
             .drawBehind {
-                drawRoundRect(Color(0xFF0B0A08), cornerRadius = CornerRadius(3.dp.toPx()))
-                drawRoundRect(
-                    Color.Black.copy(alpha = 0.7f), size = Size(size.width, 2.dp.toPx()),
-                    cornerRadius = CornerRadius(3.dp.toPx()),
-                )
-                drawRoundRect(color.copy(alpha = 0.06f), cornerRadius = CornerRadius(3.dp.toPx()))
+                val r = CornerRadius(BrutShapes.Inset.toPx())
+                drawRoundRect(p.display, cornerRadius = r)
+                drawRoundRect(p.shadow.copy(alpha = if (p.isDark) 0.7f else 0.18f), size = Size(size.width, 2.dp.toPx()), cornerRadius = r)
+                if (p.isDark) drawRoundRect(color.copy(alpha = 0.06f), cornerRadius = r)
             }
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
-        // Le texte se réduit plutôt que d'être coupé quand l'afficheur est étroit.
+        // Le texte se réduit plutôt que d'être coupé quand l'afficheur est étroit. Le halo
+        // n'existe que dans le noir : en plein jour, un afficheur ne rayonne pas.
         BasicText(
             text,
-            style = BrutType.Readout.copy(color = color, shadow = Shadow(color.copy(alpha = 0.6f), Offset.Zero, 8f)),
+            style = BrutType.Readout.copy(color = color, shadow = if (p.isDark) Shadow(color.copy(alpha = 0.6f), Offset.Zero, 8f) else null),
             maxLines = 1,
             softWrap = false,
             autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = BrutType.Readout.fontSize, stepSize = 0.5.sp),
