@@ -81,6 +81,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.unit.IntOffset
+import com.gabrielifrim.brut.ui.motion.LocalMotionLevel
+import com.gabrielifrim.brut.ui.motion.Motion
 import com.gabrielifrim.brut.ui.theme.BrutType
 
 class MainActivity : ComponentActivity() {
@@ -92,6 +105,10 @@ class MainActivity : ComponentActivity() {
     /** Écran affiché : la console ou la bibliothèque des prises. */
     private var screen by mutableStateOf(Screen.CONSOLE)
     private var canReadAll by mutableStateOf(false)
+    /** Prises rangées depuis la dernière visite de la bibliothèque (compteur de la touche PRISES). */
+    private var freshTakes by mutableIntStateOf(0)
+    /** Dernière prise rangée : mise en évidence à l'arrivée dans la bibliothèque. */
+    private var freshName by mutableStateOf<String?>(null)
     private lateinit var readAllLauncher: ActivityResultLauncher<String>
     private lateinit var consentLauncher: ActivityResultLauncher<IntentSenderRequest>
     private lateinit var folderLauncher: ActivityResultLauncher<Uri?>
@@ -100,6 +117,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         registerLaunchers()
         savedInstanceState?.getString(KEY_SCREEN)?.let { screen = Screen.valueOf(it) }
+        savedInstanceState?.let {
+            freshTakes = it.getInt(KEY_FRESH_COUNT)
+            freshName = it.getString(KEY_FRESH_NAME)
+        }
         if (savedInstanceState == null) handleShortcut(intent)
         // Bord à bord dès la première image ; les icônes suivent ensuite la palette (ci-dessous).
         enableEdgeToEdge()
@@ -137,20 +158,52 @@ class MainActivity : ComponentActivity() {
                     // Deux lectures du même état : la console suit l'état calme, les instruments l'état vivant.
                     val live = controller.state.collectAsStateWithLifecycle()
                     val state by remember { derivedStateOf { live.value.calm() } }
-                    when (screen) {
-                        Screen.CONSOLE -> ConsoleScreen(state, live, appearance, animatorScale == 0f, actions)
-                        Screen.LIBRARY -> {
-                            val lib by library.state.collectAsStateWithLifecycle()
-                            val player by library.player.state.collectAsStateWithLifecycle()
-                            LaunchedEffect(lib.consent) {
-                                lib.consent?.let { consentLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+                    // Toute fin de prise range un fichier, arrêt forcé compris (micro débranché, batterie,
+                    // espace, taille) : on suit la fin de la prise, pas le message. Le nom évite de
+                    // recompter la même prise après une rotation.
+                    var wasRecording by remember { mutableStateOf(state.isRecording) }
+                    LaunchedEffect(state.isRecording) {
+                        val name = state.fileName
+                        if (wasRecording && !state.isRecording && name != null && name != freshName) {
+                            freshName = name
+                            freshTakes++
+                        }
+                        wasRecording = state.isRecording
+                    }
+                    val motion = LocalMotionLevel.current
+                    AnimatedContent(
+                        screen,
+                        transitionSpec = {
+                            when {
+                                !motion.animates -> EnterTransition.None togetherWith ExitTransition.None
+                                // Sobre : un fondu, sans déplacement.
+                                !motion.decorative -> fadeIn(tween(Motion.REDUCED_MS)) togetherWith fadeOut(tween(Motion.REDUCED_MS))
+                                else -> {
+                                    // Dans le sens du signal : les prises sont en aval, à droite de la console.
+                                    val forward = if (targetState == Screen.LIBRARY) 1 else -1
+                                    val spec = tween<IntOffset>(Motion.TRANSITION_MS, easing = Motion.Transition)
+                                    slideInHorizontally(spec) { it * forward } togetherWith slideOutHorizontally(spec) { -it * forward }
+                                }
                             }
-                            LibraryScreen(
-                                lib, player, canReadAll, state.isRecording,
-                                folderLabel = state.folderLabel,
-                                customFolder = controller.customFolder != null,
-                                actions = libraryActions,
-                            )
+                        },
+                        label = "ecran", // texte-technique : nom d'animation pour l'outil d'inspection
+                    ) { shown ->
+                        when (shown) {
+                            Screen.CONSOLE -> ConsoleScreen(state, live, appearance, animatorScale == 0f, actions, freshTakes)
+                            Screen.LIBRARY -> {
+                                val lib by library.state.collectAsStateWithLifecycle()
+                                val player by library.player.state.collectAsStateWithLifecycle()
+                                LaunchedEffect(lib.consent) {
+                                    lib.consent?.let { consentLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+                                }
+                                LibraryScreen(
+                                    lib, player, canReadAll, state.isRecording,
+                                    folderLabel = state.folderLabel,
+                                    customFolder = controller.customFolder != null,
+                                    actions = libraryActions,
+                                    freshName = freshName,
+                                )
+                            }
                         }
                     }
                 } else {
@@ -196,6 +249,8 @@ class MainActivity : ComponentActivity() {
 
     private fun showConsole() {
         library.player.stop()
+        // La mise en évidence ne vaut que pour l'arrivée qui suit la prise.
+        freshName = null
         screen = Screen.CONSOLE
         controller.startMonitoring()
     }
@@ -258,6 +313,7 @@ class MainActivity : ComponentActivity() {
             // Pendant une prise, le micro reste ouvert ; sinon on le rend en quittant la console.
             controller.stopMonitoring()
             library.refresh()
+            freshTakes = 0
             screen = Screen.LIBRARY
         }
         override fun consumeMessage() = controller.consumeMessage()
@@ -277,6 +333,8 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_SCREEN, screen.name)
+        outState.putInt(KEY_FRESH_COUNT, freshTakes)
+        outState.putString(KEY_FRESH_NAME, freshName)
     }
 
     companion object {
@@ -344,3 +402,5 @@ private fun PermissionScreen(onGrant: () -> Unit) {
 private enum class Screen { CONSOLE, LIBRARY }
 
 private const val KEY_SCREEN = "ecran"
+private const val KEY_FRESH_COUNT = "prises_nouvelles"
+private const val KEY_FRESH_NAME = "prise_rangee"

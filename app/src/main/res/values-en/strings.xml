@@ -289,6 +289,10 @@
     <string name="a11y_clock">Take length: %1$s</string>
     <string name="a11y_clock_idle">No take in progress</string>
     <string name="a11y_open_library">Open the takes</string>
+    <plurals name="a11y_open_library_fresh">
+        <item quantity="one">Open the takes, %1$d new take</item>
+        <item quantity="other">Open the takes, %1$d new takes</item>
+    </plurals>
     <plurals name="a11y_hours">
         <item quantity="one">%d hour</item>
         <item quantity="other">%d hours</item>

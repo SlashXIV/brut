@@ -87,35 +87,56 @@ fun SignalPath(
     fileState: String,
     state: PathState,
     modifier: Modifier = Modifier,
+    /** Pré-enregistrement actif : le dernier segment est déjà rempli avant le fichier. */
+    preroll: Boolean = false,
+    /** Repères posés sur la prise : une encoche chacun autour du fichier. */
+    markers: Int = 0,
+    /** Niveau crête de 0 à 1, lu au dessin seulement : le rond FICHIER le suit pendant la prise. */
+    level: () -> Float = { 0f },
+    fileModifier: Modifier = Modifier,
     footer: @Composable () -> Unit = {},
 ) {
     val p = BrutColors.palette
     val motion = LocalMotionLevel.current
-    val spec: AnimationSpec<Color> = if (motion.animates) tween(Motion.ENTER_MS, easing = Motion.Enter) else snap()
-    val wire by animateColorAsState(
-        when (state) {
-            PathState.IDLE -> p.inkFaint
-            PathState.ARMED -> p.lamp
-            PathState.RECORDING -> p.clip
-        },
-        spec, label = "fil",
-    )
-    val border by animateColorAsState(
-        when (state) {
-            PathState.IDLE -> p.edge
-            PathState.ARMED -> p.lamp
-            PathState.RECORDING -> p.clip.copy(alpha = 0.7f)
-        },
-        spec, label = "bordure",
-    )
+    val lit = state != PathState.IDLE
+    // Expressif : à l'allumage, chaque élément s'allume après le précédent, de l'entrée vers le
+    // fichier (~400 ms en tout). L'extinction et le mouvement sobre se font d'un seul geste.
+    @Composable
+    fun lamp(target: Color, step: Int, label: String): Color {
+        val spec: AnimationSpec<Color> = when {
+            !motion.animates -> snap()
+            motion.decorative && lit -> tween(IGNITE_STEP_MS * 2, delayMillis = step * IGNITE_STEP_MS, easing = Motion.Enter)
+            else -> tween(Motion.REDUCED_MS)
+        }
+        return animateColorAsState(target, spec, label = label).value
+    }
+    val wireTarget = when (state) {
+        PathState.IDLE -> p.inkFaint
+        PathState.ARMED -> p.lamp
+        PathState.RECORDING -> p.clip
+    }
+    val borderTarget = when (state) {
+        PathState.IDLE -> p.edge
+        PathState.ARMED -> p.lamp
+        PathState.RECORDING -> p.clip.copy(alpha = 0.7f)
+    }
     RackPlate(modifier.fillMaxWidth(), contentPadding = 8.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                nodes.forEach { node ->
-                    Node(node, border, Modifier.weight(1f).fillMaxHeight())
-                    Wire(wire, Modifier.width(14.dp).fillMaxHeight())
+                nodes.forEachIndexed { i, node ->
+                    Node(node, lamp(borderTarget, 2 * i, "bordure$i"), Modifier.weight(1f).fillMaxHeight())
+                    Wire(
+                        lamp(wireTarget, 2 * i + 1, "fil$i"),
+                        // Armée : le chemin attend le signal, en pointillé et immobile.
+                        dashed = state == PathState.ARMED,
+                        filled = preroll && i == nodes.lastIndex,
+                        modifier = Modifier.width(14.dp).fillMaxHeight(),
+                    )
                 }
-                FileNode(state, wire, fileSpoken, fileState, Modifier.align(Alignment.CenterVertically))
+                FileNode(
+                    state, lamp(wireTarget, 2 * nodes.size, "fichier"), markers, level, fileSpoken, fileState,
+                    fileModifier.align(Alignment.CenterVertically),
+                )
             }
             nodes.forEachIndexed { i, node ->
                 node.imposed.forEach { block ->
@@ -130,6 +151,8 @@ fun SignalPath(
         }
     }
 }
+
+private const val IGNITE_STEP_MS = 55
 
 @Composable
 private fun Node(node: PathNode, border: Color, modifier: Modifier) {
@@ -180,13 +203,14 @@ private fun Node(node: PathNode, border: Color, modifier: Modifier) {
     }
 }
 
-/** Fil et flèche entre deux nœuds. */
+/** Fil et flèche entre deux nœuds ; [filled] : segment épais, déjà rempli par le pré-enregistrement. */
 @Composable
-private fun Wire(color: Color, modifier: Modifier) {
+private fun Wire(color: Color, dashed: Boolean, filled: Boolean, modifier: Modifier) {
     Canvas(modifier.clearAndSetSemantics {}) {
         val y = size.height / 2
         val head = 5.dp.toPx()
-        drawLine(color, Offset(0f, y), Offset(size.width - head, y), 1.5.dp.toPx())
+        val dash = if (dashed) PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx())) else null
+        drawLine(color, Offset(0f, y), Offset(size.width - head, y), (if (filled) 4.dp else 1.5.dp).toPx(), pathEffect = dash)
         val arrow = Path().apply {
             moveTo(size.width, y)
             lineTo(size.width - head, y - head * 0.8f)
@@ -197,9 +221,21 @@ private fun Wire(color: Color, modifier: Modifier) {
     }
 }
 
-/** Le fichier, au bout du chemin : un rond vide au repos, plein en prise, en pointillé armé. */
+/**
+ * Le fichier, au bout du chemin : un rond vide au repos, en pointillé armé, plein en prise.
+ * En prise, le point central suit le niveau (une information : il reste vivant en mouvement
+ * sobre) et chaque repère pose une encoche sur l'anneau, à partir du haut.
+ */
 @Composable
-private fun FileNode(state: PathState, color: Color, spoken: String, stateText: String, modifier: Modifier) {
+private fun FileNode(
+    state: PathState,
+    color: Color,
+    markers: Int,
+    level: () -> Float,
+    spoken: String,
+    stateText: String,
+    modifier: Modifier,
+) {
     val p = BrutColors.palette
     Canvas(
         modifier
@@ -210,13 +246,21 @@ private fun FileNode(state: PathState, color: Color, spoken: String, stateText: 
                 liveRegion = LiveRegionMode.Polite
             },
     ) {
-        val r = size.minDimension / 2 - 1.dp.toPx()
+        val r = size.minDimension / 2 - 2.dp.toPx()
+        val recording = state == PathState.RECORDING
         val stroke = Stroke(
-            width = if (state == PathState.RECORDING) 2.5.dp.toPx() else 1.5.dp.toPx(),
+            width = if (recording) 2.5.dp.toPx() else 1.5.dp.toPx(),
             pathEffect = if (state == PathState.ARMED) PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())) else null,
         )
         drawCircle(color, r, style = stroke)
-        drawCircle(if (state == PathState.IDLE) p.inkFaint else color, r * 0.32f)
+        val dot = if (recording) r * (0.32f + 0.5f * level().coerceIn(0f, 1f)) else r * 0.32f
+        drawCircle(if (state == PathState.IDLE) p.inkFaint else color, dot)
+        // Au-delà de 12 repères, l'anneau est plein : on n'en dessine pas plus.
+        repeat(minOf(markers, 12)) { m ->
+            val a = Math.toRadians(-90.0 + m * 30.0)
+            val dir = Offset(kotlin.math.cos(a).toFloat(), kotlin.math.sin(a).toFloat())
+            drawLine(p.lamp, center + dir * (r - 3.dp.toPx()), center + dir * (r + 2.dp.toPx()), 2.dp.toPx())
+        }
     }
 }
 

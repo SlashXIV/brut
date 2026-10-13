@@ -52,7 +52,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import com.gabrielifrim.brut.ui.motion.LocalMotionLevel
+import com.gabrielifrim.brut.ui.motion.Motion
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -142,12 +150,16 @@ fun LibraryScreen(
     folderLabel: String,
     customFolder: Boolean,
     actions: LibraryActions,
+    /** Prise qui vient d'être rangée : elle entre en montant, cerclée de vert. */
+    freshName: String? = null,
 ) {
     BackHandler(onBack = actions::back)
     var renaming by remember { mutableStateOf<Take?>(null) }
     var stamping by remember { mutableStateOf<Take?>(null) }
     var deleting by remember { mutableStateOf<Take?>(null) }
     val listState = rememberLazyListState()
+    // L'entrée de la prise rangée ne se joue qu'une fois par visite, même si sa ligne est recréée.
+    val risen = remember { mutableStateOf(false) }
     // Une prise ouverte se déplie en plaque : si elle déborde sous l'écran, on remonte la
     // liste juste assez pour voir ses boutons, sans perdre son en-tête.
     LaunchedEffect(state.selectedKey) {
@@ -210,7 +222,7 @@ fun LibraryScreen(
                                 onDelete = { if (take.canUndoDelete) actions.trash(take) else deleting = take },
                             )
                         } else {
-                            TakeRow(take) { actions.select(take) }
+                            TakeRow(take, fresh = take.name == freshName, risen) { actions.select(take) }
                         }
                     }
                     item { Spacer(Modifier.height(80.dp)) }
@@ -323,11 +335,14 @@ private fun Centered(text: String) {
 
 /** Ligne d'une prise au repos : date, nom, format, durée. */
 @Composable
-private fun TakeRow(take: Take, onClick: () -> Unit) {
+private fun TakeRow(take: Take, fresh: Boolean, risen: MutableState<Boolean>, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
+            .then(if (fresh) Modifier.riseIn(risen) else Modifier)
             .recess()
+            // Le cerclage est l'information « c'est la prise qu'on vient de ranger » : il reste sans animation.
+            .then(if (fresh) Modifier.border(1.5.dp, BrutColors.Level, BrutShapes.PlateShape) else Modifier)
             .clip(BrutShapes.PlateShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -340,6 +355,22 @@ private fun TakeRow(take: Take, onClick: () -> Unit) {
             style = BrutType.Readout,
             color = BrutColors.Ink,
         )
+    }
+}
+
+/** Entrée de la prise rangée : elle monte en place (Expressif), apparaît en fondu (Sobre), ou est là (aucun). */
+@Composable
+private fun Modifier.riseIn(played: MutableState<Boolean>): Modifier {
+    val motion = LocalMotionLevel.current
+    val t = remember { Animatable(if (motion.animates && !played.value) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        played.value = true
+        t.animateTo(1f, tween(if (motion.decorative) Motion.ENTER_MS else Motion.REDUCED_MS, easing = Motion.Enter))
+    }
+    val rise = if (motion.decorative) with(LocalDensity.current) { 16.dp.toPx() } else 0f
+    return graphicsLayer {
+        alpha = t.value
+        translationY = (1f - t.value) * rise
     }
 }
 

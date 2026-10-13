@@ -291,6 +291,10 @@
     <string name="a11y_clock">Durée de la prise : %1$s</string>
     <string name="a11y_clock_idle">Aucune prise en cours</string>
     <string name="a11y_open_library">Ouvrir les prises</string>
+    <plurals name="a11y_open_library_fresh">
+        <item quantity="one">Ouvrir les prises, %1$d nouvelle prise</item>
+        <item quantity="other">Ouvrir les prises, %1$d nouvelles prises</item>
+    </plurals>
     <plurals name="a11y_hours">
         <item quantity="one">%d heure</item>
         <item quantity="other">%d heures</item>

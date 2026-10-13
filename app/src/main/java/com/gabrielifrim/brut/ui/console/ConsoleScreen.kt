@@ -1,6 +1,31 @@
 package com.gabrielifrim.brut.ui.console
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.util.lerp
+import kotlinx.coroutines.launch
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -144,6 +169,8 @@ fun ConsoleScreen(
     appearance: Appearance,
     systemMotionOff: Boolean,
     actions: ConsoleActions,
+    /** Prises rangées depuis la dernière visite de la bibliothèque. */
+    freshTakes: Int = 0,
 ) {
     var showFormat by rememberSaveable { mutableStateOf(false) }
     var showSource by rememberSaveable { mutableStateOf(false) }
@@ -156,9 +183,33 @@ fun ConsoleScreen(
         else -> List(state.format.channels) { "${it + 1}" }
     }
 
+    // Arrêt : le fichier se ferme en fiche et glisse vers PRISES. Purement décoratif : le compteur
+    // est déjà à jour, rien n'attend la fiche, et un toucher l'efface.
+    val motion = LocalMotionLevel.current
+    val flight = remember { Animatable(1f) }
+    var flown by rememberSaveable { mutableIntStateOf(freshTakes) }
+    var fileAt by remember { mutableStateOf(Offset.Unspecified) }
+    var libraryAt by remember { mutableStateOf(Offset.Unspecified) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(freshTakes) {
+        val played = flown
+        flown = freshTakes
+        if (freshTakes > played && motion.decorative && fileAt.isSpecified && libraryAt.isSpecified) {
+            flight.snapTo(0f)
+            flight.animateTo(1f, tween(Motion.FLIGHT_MS, easing = Motion.Transition))
+        }
+    }
+    val card = BrutColors.Level
+
     Box(
         Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (flight.value < 1f) scope.launch { flight.snapTo(1f) }
+                }
+            }
             .chassis()
             .safeDrawingPadding(),
     ) {
@@ -174,9 +225,9 @@ fun ConsoleScreen(
             )
         }
         val top = @Composable {
-            Header(onDisplay = { showDisplay = true }, onLibrary = actions::openLibrary)
+            Header(freshTakes, onDisplay = { showDisplay = true }, onLibrary = actions::openLibrary) { libraryAt = it }
             Spacer(Modifier.height(10.dp))
-            ConsolePath(state, onSource = { showSource = true }, onFormat = { showFormat = true }, onEngine = { showEngine = true })
+            ConsolePath(state, live, onSource = { showSource = true }, onFormat = { showFormat = true }, onEngine = { showEngine = true }) { fileAt = it }
             Warnings(state)
         }
         BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -224,6 +275,13 @@ fun ConsoleScreen(
         }
 
         MessageBar(state.message, actions::consumeMessage, Modifier.align(Alignment.BottomCenter))
+        // Calque à part : pendant le vol, seule la fiche se redessine, pas la console.
+        var origin by remember { mutableStateOf(Offset.Zero) }
+        Canvas(Modifier.matchParentSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+            if (flight.value < 1f && fileAt.isSpecified && libraryAt.isSpecified) {
+                drawFiledCard(flight.value, fileAt - origin, libraryAt - origin, card)
+            }
+        }
     }
 
     if (showFormat) {
@@ -296,7 +354,7 @@ private fun LiveMeters(live: State<RecorderState>, labels: List<String>, actions
 
 /** Le logo, puis l'affichage et les prises, en aval comme le signal. */
 @Composable
-private fun Header(onDisplay: () -> Unit, onLibrary: () -> Unit) {
+private fun Header(freshTakes: Int, onDisplay: () -> Unit, onLibrary: () -> Unit, onLibraryAt: (Offset) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // Le mot-symbole reprend l'icône : la lettre, puis le trait ambre.
         Column(Modifier.clearAndSetSemantics {}) {
@@ -306,10 +364,16 @@ private fun Header(onDisplay: () -> Unit, onLibrary: () -> Unit) {
         Spacer(Modifier.weight(1f))
         DisplayButton(onDisplay)
         Spacer(Modifier.width(8.dp))
-        val libraryLabel = stringResource(R.string.a11y_open_library)
+        val libraryLabel = if (freshTakes > 0) {
+            pluralStringResource(R.plurals.a11y_open_library_fresh, freshTakes, freshTakes)
+        } else {
+            stringResource(R.string.a11y_open_library)
+        }
+        val fresh = if (freshTakes > 0) "  +$freshTakes" else ""
         PanelKey(
-            stringResource(R.string.library_open).uppercase() + "  ›",
+            stringResource(R.string.library_open).uppercase() + fresh + "  ›",
             Modifier
+                .onGloballyPositioned { onLibraryAt(it.boundsInRoot().center) }
                 .clickable(role = Role.Button, onClick = onLibrary)
                 .clearAndSetSemantics {
                     contentDescription = libraryLabel
@@ -348,7 +412,14 @@ private fun DisplayButton(onClick: () -> Unit) {
  * le fichier. Ce qu'Android impose se branche sous le nœud où cela se produit.
  */
 @Composable
-private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: () -> Unit, onEngine: () -> Unit) {
+private fun ConsolePath(
+    state: RecorderState,
+    live: State<RecorderState>,
+    onSource: () -> Unit,
+    onFormat: () -> Unit,
+    onEngine: () -> Unit,
+    onFileAt: (Offset) -> Unit,
+) {
     val device = state.selectedDevice
     val c = state.capture
     val f = state.format
@@ -410,6 +481,10 @@ private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: ()
         else -> channelsLabel(f.channels).lowercase()
     }
     val clipped = state.levels.take(f.channels).any { it.clipped }
+    val gainImposed = buildList {
+        // Une perte du moteur se branche juste avant le fichier : c'est là que des échantillons manquent.
+        if ((state.stats?.lostFrames ?: 0L) > 0L) add(Imposed(stringResource(R.string.a11y_engine_loss), severe = true))
+    }
 
     val nodes = listOf(
         PathNode(
@@ -428,6 +503,7 @@ private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: ()
         PathNode(
             key = stringResource(R.string.gain), value = gainValue, detail = gainDetail,
             spoken = if (clipped) stringResource(R.string.a11y_path_gain_clip, gainValue) else stringResource(R.string.a11y_path_gain, gainValue, gainDetail),
+            imposed = gainImposed,
             alarm = clipped,
         ),
     )
@@ -448,6 +524,14 @@ private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: ()
             },
         ),
         state = pathState,
+        preroll = state.options.prerollSeconds > 0 && !state.isRecording,
+        markers = if (state.isRecording) state.markerCount else 0,
+        level = {
+            // Même plancher que le bas de l'échelle des LED : sous −60 dBFS, le point est au repos.
+            val peak = live.value.levels.take(f.channels).maxOfOrNull { it.peakDb } ?: -60f
+            ((peak + 60f) / 60f).coerceIn(0f, 1f)
+        },
+        fileModifier = Modifier.onGloballyPositioned { onFileAt(it.boundsInRoot().center) },
     ) {
         state.stats?.let { EngineLine(it, onEngine) }
     }
@@ -469,14 +553,10 @@ private fun EngineLine(stats: EngineStats.Snapshot, onClick: () -> Unit) {
             .heightIn(min = 32.dp)
             .clip(BrutShapes.InsetShape)
             .clickable(onClick = onClick)
-            // Seule une perte est annoncée d'office ; les chiffres se lisent à la demande.
             .clearAndSetSemantics {
                 contentDescription = spoken
-                // Annonce d'office seulement pour une perte : les pourcentages changent chaque seconde.
-                if (stats.lostFrames > 0) {
-                    stateDescription = loss
-                    liveRegion = LiveRegionMode.Polite
-                }
+                // La perte est annoncée par son bloc sur le chemin ; ici, elle se lit à la demande.
+                if (stats.lostFrames > 0) stateDescription = loss
                 role = Role.Button
                 onClick(open) { onClick(); true }
             }
@@ -622,6 +702,10 @@ private fun LiveClock(live: State<RecorderState>, recording: Boolean) {
         withStyle(SpanStyle(fontSize = 0.55.em)) { append(full.substring(cut)) }
     }
     val spoken = if (recording) stringResource(R.string.a11y_clock, spokenDuration(seconds)) else stringResource(R.string.a11y_clock_idle)
+    if (recording && LocalMotionLevel.current.decorative) {
+        RollingClock(full, cut, Modifier.clearAndSetSemantics { contentDescription = spoken })
+        return
+    }
     BasicText(
         text,
         modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
@@ -629,6 +713,62 @@ private fun LiveClock(live: State<RecorderState>, recording: Boolean) {
         maxLines = 1,
         softWrap = false,
         autoSize = TextAutoSize.StepBased(minFontSize = 22.sp, maxFontSize = BrutType.Clock.fontSize, stepSize = 1.sp),
+    )
+}
+
+/**
+ * Chrono à rouleaux (Expressif seulement, en prise) : chaque chiffre qui change monte comme sur
+ * un compteur mécanique. Les centièmes ne roulent pas, ils seraient un flou. La taille se règle
+ * une fois sur la place disponible, comme le chrono fixe.
+ */
+@Composable
+private fun RollingClock(full: String, cut: Int, modifier: Modifier) {
+    val style = BrutType.Clock.copy(color = BrutColors.Ink)
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val width = remember(measurer, style, full.length) {
+            measurer.measure(full.substring(0, cut), style, softWrap = false).size.width * (1f + 0.55f * (full.length - cut) / cut)
+        }
+        val maxPx = constraints.maxWidth.toFloat()
+        val scale = if (width > maxPx) maxPx / width else 1f
+        val fitted = style.copy(fontSize = (style.fontSize.value * scale).coerceAtLeast(22f).sp)
+        Row(Modifier.clipToBounds(), verticalAlignment = Alignment.Bottom) {
+            full.substring(0, cut).forEachIndexed { i, ch ->
+                key(i) {
+                    AnimatedContent(
+                        ch,
+                        transitionSpec = {
+                            (slideInVertically(tween(Motion.REDUCED_MS)) { it } togetherWith
+                                slideOutVertically(tween(Motion.REDUCED_MS)) { -it }).using(SizeTransform(clip = true))
+                        },
+                        label = "chiffre",
+                    ) { Text(it.toString(), style = fitted, maxLines = 1, softWrap = false) }
+                }
+            }
+            Text(full.substring(cut), style = fitted.copy(fontSize = fitted.fontSize * 0.55f), maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/**
+ * La fiche rangée : à [t] = 0 c'est le rond du fichier ; elle se ferme en fiche au premier
+ * tiers, puis file en arc vers la touche PRISES et s'y efface.
+ */
+private fun DrawScope.drawFiledCard(t: Float, from: Offset, to: Offset, color: Color) {
+    if (!from.isSpecified || !to.isSpecified) return
+    val close = (t / 0.3f).coerceIn(0f, 1f)
+    val travel = ((t - 0.3f) / 0.7f).coerceIn(0f, 1f)
+    val r = 16.dp.toPx()
+    val w = lerp(2 * r, 20.dp.toPx(), close)
+    val h = lerp(2 * r, 26.dp.toPx(), close)
+    // Un arc vers le haut : la fiche monte vers la touche au lieu de raser le chemin.
+    val center = androidx.compose.ui.geometry.lerp(from, to, travel) - Offset(0f, 24.dp.toPx() * 4 * travel * (1 - travel))
+    val alpha = if (travel > 0.8f) (1f - travel) / 0.2f else 1f
+    drawRoundRect(
+        color.copy(alpha = alpha),
+        topLeft = center - Offset(w / 2, h / 2),
+        size = Size(w, h),
+        cornerRadius = CornerRadius(lerp(r, 3.dp.toPx(), close)),
     )
 }
 

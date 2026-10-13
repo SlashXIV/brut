@@ -45,6 +45,7 @@ import com.gabrielifrim.brut.ui.theme.BrutType
 @Composable
 fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, armed: Boolean = false) {
     val motion = LocalMotionLevel.current
+    val haptics = rememberHaptics()
     val p = BrutColors.palette
     val ring by animateColorAsState(
         when {
@@ -66,7 +67,11 @@ fun RecordButton(recording: Boolean, enabled: Boolean, onClick: () -> Unit, modi
         modifier
             .size(92.dp)
             .clip(CircleShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button) {
+                // Le lancement se sent sans regarder ; l'arrêt, lui, se voit au chemin qui s'éteint.
+                if (!recording && !armed) haptics.confirm()
+                onClick()
+            }
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

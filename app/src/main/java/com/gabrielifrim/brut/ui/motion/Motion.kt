@@ -20,6 +20,8 @@ object Motion {
     val Transition = CubicBezierEasing(0.65f, 0f, 0.35f, 1f)
     const val ENTER_MS = 320
     const val TRANSITION_MS = 420
+    /** Fiche rangée, du fichier jusqu'à PRISES. */
+    const val FLIGHT_MS = 560
     /** Durée unique en mouvement sobre : un changement d'état, pas un mouvement. */
     const val REDUCED_MS = 180
 }
