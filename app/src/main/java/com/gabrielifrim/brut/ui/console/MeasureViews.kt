@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,8 +53,10 @@ private fun lufsText(value: Float): String =
  * terme par rapport aux cibles usuelles : −23 (diffusion EBU), −16 et −14 (écoute en ligne).
  */
 @Composable
-fun LufsPanel(loudness: LoudnessReading, onReset: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+fun LufsPanel(loudness: LoudnessReading, onReset: () -> Unit, modifier: Modifier = Modifier) = BoxWithConstraints(modifier) {
+    // Pont bas : la barre part la première (les cibles se lisent dans les valeurs), puis les espaces se resserrent.
+    val withBar = maxHeight >= 250.dp
+    Column(Modifier.fillMaxSize().padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(if (maxHeight >= 200.dp) 10.dp else 4.dp)) {
         Spacer(Modifier.weight(1f))
         LufsRow(stringResource(R.string.lufs_momentary), loudness.momentary, "LUFS", BrutColors.Ink)
         LufsRow(stringResource(R.string.lufs_short), loudness.shortTerm, "LUFS", BrutColors.Ink)
@@ -63,7 +66,7 @@ fun LufsPanel(loudness: LoudnessReading, onReset: () -> Unit, modifier: Modifier
             if (loudness.truePeakMax > -1f) BrutColors.Clip else BrutColors.Ink,
         )
         // Les cibles se lisent déjà dans les valeurs : la barre est un repère visuel.
-        LoudnessBar(loudness.shortTerm, Modifier.fillMaxWidth().height(58.dp).clearAndSetSemantics {})
+        if (withBar) LoudnessBar(loudness.shortTerm, Modifier.fillMaxWidth().height(58.dp).clearAndSetSemantics {})
         Spacer(Modifier.weight(1f))
         Text(
             stringResource(R.string.lufs_reset).uppercase(),

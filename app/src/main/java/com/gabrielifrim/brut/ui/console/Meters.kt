@@ -203,7 +203,8 @@ fun MeterBridge(
                     CompactReadout(channelLabels[c], spokenChannel(c, levels.size), level, Modifier.weight(1f))
                 }
             }
-        } else if (mode != MeterMode.VU || roomy) {
+        } else if (mode == MeterMode.PEAK || mode == MeterMode.SPECTRUM || roomy) {
+            // Sur un pont bas, VU et LUFS ont besoin de toute la hauteur : les chiffres par voie s'effacent.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 levels.forEachIndexed { c, level -> Readouts(channelLabels[c], spokenChannel(c, levels.size), level) }
             }
