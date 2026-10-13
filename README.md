@@ -7,6 +7,13 @@
 <p align="center"><b>L’enregistreur audio Android qui ne touche pas au son.</b><br>
 WAV non compressé · aucun traitement automatique · entrée USB-C au choix</p>
 
+<p align="center">
+  <img src="design/screenshots/console.webp" width="200" alt="Console au repos, palette Scène : chemin du signal (entrée, format, gain, fichier), vu-mètres à aiguille et faders de gain">
+  <img src="design/screenshots/prise.webp" width="200" alt="Prise en cours : le chemin du signal passe au rouge, crête-mètres, chrono et bouton de repère">
+  <img src="design/screenshots/bibliotheque.webp" width="200" alt="Bibliothèque des prises, palette Plein jour : chaque prise avec son format, ses repères et sa taille">
+  <img src="design/screenshots/rognage.webp" width="200" alt="Rognage d’une prise : forme d’onde, poignées IN et OUT, lecture de la sélection">
+</p>
+
 ---
 
 La plupart des applications d’enregistrement passent le signal à la moulinette : gain
@@ -42,6 +49,9 @@ micro arrive dans le fichier, tel quel. Et quand Android modifie quelque chose e
 - Vu-mètre à aiguille (0 VU = −18 dBFS) ou crête-mètres LED, au choix
 - Mode de capture imposable (automatique, brut, sans gain auto, standard)
 - Réglages retrouvés à chaque ouverture
+- Deux palettes testées pour le contraste et le daltonisme : **Scène** (sombre, pour le concert)
+  et **Plein jour** (claire, lisible au soleil), ou automatique selon le thème du téléphone ;
+  mouvement **sobre** au choix, et respect de « Supprimer les animations »
 
 **Outils d’ingé son**
 - **Pré-enregistrement** (2, 5 ou 10 s) : l’attaque d’un son qui t’a surpris n’est pas perdue
