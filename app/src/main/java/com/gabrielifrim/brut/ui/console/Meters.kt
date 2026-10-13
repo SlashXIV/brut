@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.heightIn
@@ -106,9 +108,13 @@ fun MeterBridge(
     spectrum: FloatArray? = null,
     spectrumCenters: FloatArray = FloatArray(0),
     onResetLoudness: () -> Unit = {},
-) {
+) = BoxWithConstraints(modifier) {
+    // Pont de mesure bas (téléphone en portrait) : en mode VU, les chiffres laissent leur place aux
+    // cadrans, sinon deux aiguilles de 40 dp ne se liraient plus. Ils restent en mode Crête.
+    val roomy = maxHeight >= 330.dp
     Column(
-        modifier
+        Modifier
+            .fillMaxSize()
             .recess()
             .clip(BrutShapes.PlateShape)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -197,7 +203,7 @@ fun MeterBridge(
                     CompactReadout(channelLabels[c], spokenChannel(c, levels.size), level, Modifier.weight(1f))
                 }
             }
-        } else {
+        } else if (mode != MeterMode.VU || roomy) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 levels.forEachIndexed { c, level -> Readouts(channelLabels[c], spokenChannel(c, levels.size), level) }
             }
@@ -408,13 +414,20 @@ private fun Scale(modifier: Modifier) {
             .clearAndSetSemantics {}
             // Graduations mesurées une fois par taille, pas à chaque image.
             .drawWithCache {
+                // Sur un pont de mesure bas, les chiffres voisins se chevaucheraient (0 / −3 / −6,
+                // −40 / −50 / −60) : un repère trop proche du précédent garde son trait, pas son chiffre.
+                var lastY = Float.NEGATIVE_INFINITY
                 val marks = SCALE_MARKS.map { mark ->
-                    measurer.measure(if (mark == 0) "0" else "−${-mark}", style) to size.height * (1f - meterPosition(mark.toFloat()))
+                    val y = size.height * (1f - meterPosition(mark.toFloat()))
+                    val layout = measurer.measure(if (mark == 0) "0" else "−${-mark}", style)
+                    val fits = y - lastY >= layout.size.height * 0.9f
+                    if (fits) lastY = y
+                    (layout.takeIf { fits }) to y
                 }
                 val tickLen = 4.dp.toPx()
                 onDrawBehind {
                     marks.forEach { (layout, y) ->
-                        drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2, y - layout.size.height / 2))
+                        layout?.let { drawText(it, topLeft = Offset((size.width - it.size.width) / 2, y - it.size.height / 2)) }
                         drawLine(tick, Offset(0f, y), Offset(tickLen, y))
                         drawLine(tick, Offset(size.width - tickLen, y), Offset(size.width, y))
                     }

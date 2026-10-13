@@ -361,7 +361,11 @@ private fun ConsolePath(state: RecorderState, onSource: () -> Unit, onFormat: ()
         null -> stringResource(R.string.capture_waiting)
     }
     val inputName = device?.let { deviceName(it) } ?: stringResource(R.string.source_none)
-    val inputDetail = listOfNotNull(device?.let { kindLabel(it.kind) }, sourceTag).joinToString(" · ")
+    // Le type d'entrée seulement s'il n'est pas déjà dans le nom (« Micro interne · bottom »).
+    val inputDetail = listOfNotNull(
+        device?.let { kindLabel(it.kind) }?.takeUnless { inputName.contains(it, ignoreCase = true) },
+        sourceTag,
+    ).joinToString(" · ")
     val inputImposed = buildList {
         if (state.isRerouted) add(Imposed(stringResource(R.string.warning_rerouted, c?.routedDeviceName.orEmpty()), severe = true))
         if (c?.silenced == true) add(Imposed(stringResource(R.string.warning_silenced), severe = true))

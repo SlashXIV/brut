@@ -91,23 +91,32 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
             val cover = Brush.verticalGradient(listOf(Dial.CoverTop, Dial.CoverBottom))
 
             // Géométrie calculée sur la place réelle : l'arc ET ses chiffres doivent tenir
-            // en hauteur comme en largeur, quel que soit le format du cadran.
-            val labelSpace = 26.dp.toPx()
+            // en hauteur comme en largeur, quel que soit le format du cadran. Cadran bas (pont de
+            // mesure court) : les chiffres passent sous l'arc, qui récupère toute la hauteur.
+            val low = size.height < 110.dp.toPx()
+            val labelSpace = if (low) 4.dp.toPx() else 26.dp.toPx()
+            val inner = if (low) 14.dp.toPx() else 0f
             val halfSweep = Math.toRadians(SWEEP_DEG / 2.0)
             // Comme sur un vrai VU, le pivot peut se trouver SOUS le cadran : l'arc s'étale
             // alors sur toute la largeur au lieu de rester un petit demi-cercle.
             val top = inset + 6.dp.toPx() + labelSpace
             val bottomRoom = size.height - inset - 8.dp.toPx()
-            // Marge latérale : les coins bas portent le canal (G/D) et la LED PEAK.
-            val byWidth = (size.width / 2 - inset - 64.dp.toPx()) / sin(halfSweep).toFloat() - labelSpace
-            val byHeight = (bottomRoom - top) / (1f - cos(halfSweep).toFloat())
+            // Petite marge latérale : le canal (G/D) et la LED PEAK sont dans les coins BAS, sous les
+            // extrémités de l'arc, qui restent hautes. Une marge large rapetissait l'arc sur un pont bas.
+            val byWidth = (size.width / 2 - inset - 24.dp.toPx()) / sin(halfSweep).toFloat() - labelSpace
+            val byHeight = (bottomRoom - top - inner) / (1f - cos(halfSweep).toFloat())
             val radius = minOf(byWidth, byHeight).coerceAtLeast(24.dp.toPx())
             val pivot = Offset(size.width / 2, top + radius)
             // Les textes suivent la taille du cadran, dans des bornes lisibles.
             val k = (radius / 120.dp.toPx()).coerceIn(0.72f, 1.15f)
             val scaleStyle = BrutType.ReadoutSmall.copy(fontFamily = BrutFonts.Engraving, fontSize = 11.sp * k)
             // Petit cadran : on ne chiffre que les repères principaux pour qu'ils ne se chevauchent pas.
-            val labelled = if (radius < 110.dp.toPx()) setOf(-20, -10, -5, -3, 0, 3) else VU_MARKS.toSet()
+            // Cadran bas, chiffres sous l'arc : « 20 » tomberait sous l'aiguille au repos.
+            val labelled = when {
+                low -> VU_MARKS.toSet() - (-20)
+                radius < 110.dp.toPx() -> setOf(-20, -10, -5, -3, 0, 3)
+                else -> VU_MARKS.toSet()
+            }
             fun angleOf(f: Float) = Math.toRadians((-90f - SWEEP_DEG / 2 + SWEEP_DEG * f).toDouble())
             fun pointAt(f: Float, rr: Float) = angleOf(f).let { Offset(pivot.x + rr * cos(it).toFloat(), pivot.y + rr * sin(it).toFloat()) }
 
@@ -121,11 +130,11 @@ fun VuMeter(level: ChannelLevel, label: String, modifier: Modifier = Modifier) {
             val numbers = VU_MARKS.filter { it in labelled }.map { mark ->
                 val text = if (mark > 0) "+$mark" else "${-mark}"
                 val layout = measurer.measure(text, scaleStyle.copy(color = if (mark > 0) Dial.Red else Dial.Ink))
-                val p = pointAt(vuFraction(mark.toFloat()), radius + 17.dp.toPx())
+                val p = pointAt(vuFraction(mark.toFloat()), if (low) radius - 9.dp.toPx() else radius + 17.dp.toPx())
                 layout to Offset(p.x - layout.size.width / 2, p.y - layout.size.height / 2)
             }
             // Sur un tout petit cadran, l'inscription chevaucherait l'échelle : on s'en passe.
-            val vu = if (radius >= 90.dp.toPx()) measurer.measure(vuText, BrutType.Title.copy(color = Dial.Ink, fontSize = 20.sp * k)) else null
+            val vu = if (!low && radius >= 90.dp.toPx()) measurer.measure(vuText, BrutType.Title.copy(color = Dial.Ink, fontSize = 20.sp * k)) else null
             val vuY = vu?.let { minOf(pivot.y - radius * 0.55f, size.height - inset - 8.dp.toPx() - it.size.height / 2) - it.size.height / 2 } ?: 0f
             val ch = measurer.measure(label, BrutType.Legend.copy(color = Dial.Ink))
             val led = Offset(size.width - inset - 14.dp.toPx(), size.height - inset - 12.dp.toPx())

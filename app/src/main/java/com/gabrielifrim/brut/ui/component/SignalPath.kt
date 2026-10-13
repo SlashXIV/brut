@@ -169,7 +169,7 @@ private fun Node(node: PathNode, border: Color, modifier: Modifier) {
             node.value,
             style = BrutType.Node.copy(color = p.ink, lineHeight = 1.05.em),
             maxLines = 2,
-            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = BrutType.Node.fontSize, stepSize = 0.5.sp),
+            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = BrutType.Node.fontSize, stepSize = 0.5.sp),
         )
         BasicText(
             node.detail,
