@@ -23,7 +23,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.util.lerp
 import kotlinx.coroutines.launch
 import androidx.compose.animation.EnterTransition
@@ -527,9 +529,8 @@ private fun ConsolePath(
         preroll = state.options.prerollSeconds > 0 && !state.isRecording,
         markers = if (state.isRecording) state.markerCount else 0,
         level = {
-            // Même plancher que le bas de l'échelle des LED : sous −60 dBFS, le point est au repos.
-            val peak = live.value.levels.take(f.channels).maxOfOrNull { it.peakDb } ?: -60f
-            ((peak + 60f) / 60f).coerceIn(0f, 1f)
+            // Même échelle que les LED (IEC 60268-18) : dilatée vers le haut, là où se règle un niveau.
+            meterPosition(live.value.levels.take(f.channels).maxOfOrNull { it.peakDb } ?: -96f)
         },
         fileModifier = Modifier.onGloballyPositioned { onFileAt(it.boundsInRoot().center) },
     ) {
@@ -718,20 +719,13 @@ private fun LiveClock(live: State<RecorderState>, recording: Boolean) {
 
 /**
  * Chrono à rouleaux (Expressif seulement, en prise) : chaque chiffre qui change monte comme sur
- * un compteur mécanique. Les centièmes ne roulent pas, ils seraient un flou. La taille se règle
- * une fois sur la place disponible, comme le chrono fixe.
+ * un compteur mécanique. Les centièmes ne roulent pas, ils seraient un flou. Mesuré à sa taille
+ * naturelle puis réduit à la place disponible : il ne déborde jamais sur le bouton de repère.
  */
 @Composable
 private fun RollingClock(full: String, cut: Int, modifier: Modifier) {
-    val style = BrutType.Clock.copy(color = BrutColors.Ink)
-    val measurer = rememberTextMeasurer()
-    BoxWithConstraints(modifier) {
-        val width = remember(measurer, style, full.length) {
-            measurer.measure(full.substring(0, cut), style, softWrap = false).size.width * (1f + 0.55f * (full.length - cut) / cut)
-        }
-        val maxPx = constraints.maxWidth.toFloat()
-        val scale = if (width > maxPx) maxPx / width else 1f
-        val fitted = style.copy(fontSize = (style.fontSize.value * scale).coerceAtLeast(22f).sp)
+    val fitted = BrutType.Clock.copy(color = BrutColors.Ink)
+    Box(modifier.fitWidth()) {
         Row(Modifier.clipToBounds(), verticalAlignment = Alignment.Bottom) {
             full.substring(0, cut).forEachIndexed { i, ch ->
                 key(i) {
@@ -746,6 +740,20 @@ private fun RollingClock(full: String, cut: Int, modifier: Modifier) {
                 }
             }
             Text(full.substring(cut), style = fitted.copy(fontSize = fitted.fontSize * 0.55f), maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/** Mesure le contenu sans limite de largeur, puis le réduit (calé en bas à gauche) s'il ne tient pas. */
+private fun Modifier.fitWidth(): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+    val scale = if (constraints.hasBoundedWidth && p.width > constraints.maxWidth) constraints.maxWidth.toFloat() / p.width else 1f
+    val height = (p.height * scale).roundToInt()
+    layout((p.width * scale).roundToInt(), height) {
+        p.placeWithLayer(0, height - p.height) {
+            scaleX = scale
+            scaleY = scale
+            transformOrigin = TransformOrigin(0f, 1f)
         }
     }
 }
